@@ -6,6 +6,8 @@ import numpy as np
 import trimesh
 from im2mesh.data.core import Field
 from im2mesh.utils import binvox_rw
+from periodic_shapes import utils
+import torch
 
 
 class IndexField(Field):
@@ -62,8 +64,12 @@ class ImagesField(Field):
         random_view (bool): whether a random view should be used
         with_camera (bool): whether camera data should be provided
     '''
-    def __init__(self, folder_name, transform=None,
-                 extension='jpg', random_view=True, with_camera=False):
+    def __init__(self,
+                 folder_name,
+                 transform=None,
+                 extension='jpg',
+                 random_view=True,
+                 with_camera=False):
         self.folder_name = folder_name
         self.transform = transform
         self.extension = extension
@@ -81,7 +87,7 @@ class ImagesField(Field):
         folder = os.path.join(model_path, self.folder_name)
         files = glob.glob(os.path.join(folder, '*.%s' % self.extension))
         if self.random_view:
-            idx_img = random.randint(0, len(files)-1)
+            idx_img = random.randint(0, len(files) - 1)
         else:
             idx_img = 0
         filename = files[idx_img]
@@ -90,9 +96,7 @@ class ImagesField(Field):
         if self.transform is not None:
             image = self.transform(image)
 
-        data = {
-            None: image
-        }
+        data = {None: image}
 
         if self.with_camera:
             camera_file = os.path.join(folder, 'cameras.npz')
@@ -130,7 +134,11 @@ class PointsField(Field):
             provided
 
     '''
-    def __init__(self, file_name, transform=None, with_transforms=False, unpackbits=False):
+    def __init__(self,
+                 file_name,
+                 transform=None,
+                 with_transforms=False,
+                 unpackbits=False):
         self.file_name = file_name
         self.transform = transform
         self.with_transforms = with_transforms
@@ -319,3 +327,79 @@ class MeshField(Field):
         '''
         complete = (self.file_name in files)
         return complete
+
+
+class SphericalCoordinateField(Field):
+    ''' Angle field class.
+
+    It provides the class used for spherical coordinate data.
+
+    Args:
+        file_name (str): file name
+        transform (list): list of transformations applied to data points
+    '''
+    def __init__(self,
+                 primitive_points_sample_n,
+                 mode,
+                 is_normal_icosahedron=False,
+                 icosahedron_subdiv=2,
+                 icosahedron_uv_margin=1e-5,
+                 uv_sphere_length=20,
+                 normal_mesh_no_invert=False,
+                 *args,
+                 **kwargs):
+        self.primitive_points_sample_n = primitive_points_sample_n
+        self.mode = mode
+        self.is_normal_icosahedron = is_normal_icosahedron
+
+        if self.is_normal_icosahedron:
+            icosamesh = trimesh.creation.icosphere(
+                subdivisions=icosahedron_subdiv)
+
+            if not normal_mesh_no_invert:
+                icosamesh.invert()
+            uv = trimesh.util.vector_to_spherical(icosamesh.vertices)
+
+            uv[:, 1] = uv[:, 1] - np.pi / 2
+
+            uv_thetas = torch.tensor(uv).float()
+            uv_th = uv_thetas[:, 0].clamp(min=(-np.pi + icosahedron_uv_margin),
+                                          max=(np.pi - icosahedron_uv_margin))
+            uv_ph = uv_thetas[:, 1].clamp(
+                min=(-np.pi / 2 + icosahedron_uv_margin),
+                max=(np.pi / 2 - icosahedron_uv_margin))
+            self.angles_for_nomal = torch.stack([uv_th, uv_ph], axis=-1)
+            self.face_for_normal = torch.from_numpy(icosamesh.faces)
+
+    def load(self, model_path, idx, category):
+        ''' Sample spherical coordinate.
+
+        Args:
+            model_path (str): path to model
+            idx (int): ID of data point
+            category (int): index of category
+        '''
+        angles = utils.sample_spherical_angles(
+            batch=1,
+            sample_num=self.primitive_points_sample_n,
+            sampling='grid' if self.mode in ['test', 'val'] else 'uniform',
+            device='cpu',
+            dim=3,  #sgn_convertible=True, phi_margin=1e-5, theta_margin=1e-5)
+            sgn_convertible=True,
+            phi_margin=1e-5,
+            theta_margin=1e-5).squeeze(0)
+
+        data = {None: angles}
+        if self.is_normal_icosahedron:
+            data.update({
+                'normal_angles': self.angles_for_nomal.clone(),
+                'normal_face': self.face_for_normal.clone()
+            })
+        return data
+
+    def check_complete(self, _):
+        ''' Check if field is complete.
+
+        Returns: True
+        '''
+        return True

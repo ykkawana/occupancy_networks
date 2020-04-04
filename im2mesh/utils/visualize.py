@@ -2,10 +2,15 @@ import numpy as np
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from torchvision.utils import save_image
+from torchvision import transforms
 import im2mesh.common as common
+import io
+from PIL import Image
+
+toPIL = transforms.ToPILImage()
 
 
-def visualize_data(data, data_type, out_file):
+def visualize_data(data, data_type, out_file, return_plot=False):
     r''' Visualizes the data with regard to its type.
 
     Args:
@@ -17,17 +22,28 @@ def visualize_data(data, data_type, out_file):
         if data.dim() == 3:
             data = data.unsqueeze(0)
         save_image(data, out_file, nrow=4)
+        if return_plot:
+            image = toPIL(data[0])
+            return image
     elif data_type == 'voxels':
-        visualize_voxels(data, out_file=out_file)
+        plot = visualize_voxels(data,
+                                out_file=out_file,
+                                return_plot=return_plot)
+        if return_plot:
+            return plot
     elif data_type == 'pointcloud':
-        visualize_pointcloud(data, out_file=out_file)
+        plot = visualize_pointcloud(data,
+                                    out_file=out_file,
+                                    return_plot=return_plot)
+        if return_plot:
+            return plot
     elif data_type is None or data_type == 'idx':
         pass
     else:
         raise ValueError('Invalid data_type "%s"' % data_type)
 
 
-def visualize_voxels(voxels, out_file=None, show=False):
+def visualize_voxels(voxels, out_file=None, show=False, return_plot=False):
     r''' Visualizes voxel data.
 
     Args:
@@ -52,9 +68,16 @@ def visualize_voxels(voxels, out_file=None, show=False):
         plt.show()
     plt.close(fig)
 
+    if return_plot and out_file is not None:
+        image = Image.open(out_file)
+        return image if return_plot else None
 
-def visualize_pointcloud(points, normals=None,
-                         out_file=None, show=False):
+
+def visualize_pointcloud(points,
+                         normals=None,
+                         out_file=None,
+                         show=False,
+                         return_plot=False):
     r''' Visualizes point cloud data.
 
     Args:
@@ -70,11 +93,14 @@ def visualize_pointcloud(points, normals=None,
     ax = fig.gca(projection=Axes3D.name)
     ax.scatter(points[:, 2], points[:, 0], points[:, 1])
     if normals is not None:
-        ax.quiver(
-            points[:, 2], points[:, 0], points[:, 1],
-            normals[:, 2], normals[:, 0], normals[:, 1],
-            length=0.1, color='k'
-        )
+        ax.quiver(points[:, 2],
+                  points[:, 0],
+                  points[:, 1],
+                  normals[:, 2],
+                  normals[:, 0],
+                  normals[:, 1],
+                  length=0.1,
+                  color='k')
     ax.set_xlabel('Z')
     ax.set_ylabel('X')
     ax.set_zlabel('Y')
@@ -88,9 +114,17 @@ def visualize_pointcloud(points, normals=None,
         plt.show()
     plt.close(fig)
 
+    if return_plot and out_file is not None:
+        image = Image.open(out_file)
+        return image if return_plot else None
 
-def visualise_projection(
-        self, points, world_mat, camera_mat, img, output_file='out.png'):
+
+def visualise_projection(self,
+                         points,
+                         world_mat,
+                         camera_mat,
+                         img,
+                         output_file='out.png'):
     r''' Visualizes the transformation and projection to image plane.
 
         The first points of the batch are transformed and projected to the
@@ -111,7 +145,6 @@ def visualise_projection(
     pimg2 = points_img[0].detach().cpu().numpy()
     image = img[0].cpu().numpy()
     plt.imshow(image.transpose(1, 2, 0))
-    plt.plot(
-        (pimg2[:, 0] + 1)*image.shape[1]/2,
-        (pimg2[:, 1] + 1) * image.shape[2]/2, 'x')
+    plt.plot((pimg2[:, 0] + 1) * image.shape[1] / 2,
+             (pimg2[:, 1] + 1) * image.shape[2] / 2, 'x')
     plt.savefig(output_file)

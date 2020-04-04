@@ -1,0 +1,19 @@
+inherit_from: configs/img/pnet.yaml
+data:
+  classes: ['02691156'] # plane
+  train_split: train # Overfit to train data, see if training is working
+  val_split: train
+  test_split: train
+  debug:
+    sample_n: 50
+model:
+  decoder_kwargs:
+    paramnet_class: ParamNetMLP
+training:
+  out_dir:  out/img/test
+  batch_size: 20
+  visualize_every: 500
+  validate_every: 100
+  checkpoint_every: 5
+  wandb_resume: null
+

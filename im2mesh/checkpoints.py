@@ -2,6 +2,7 @@ import os
 import urllib
 import torch
 from torch.utils import model_zoo
+import wandb
 
 
 class CheckpointIO(object):
@@ -34,8 +35,11 @@ class CheckpointIO(object):
 
         outdict = kwargs
         for k, v in self.module_dict.items():
+            v = v if not hasattr(v, 'module') else v.module
             outdict[k] = v.state_dict()
         torch.save(outdict, filename)
+
+        wandb.save(filename)
 
     def load(self, filename):
         '''Loads a module dictionary from local file or url.
@@ -85,15 +89,48 @@ class CheckpointIO(object):
         Args:
             state_dict (dict): State dict of model
     '''
-
+        """
         for k, v in self.module_dict.items():
             if k in state_dict:
                 v.load_state_dict(state_dict[k])
             else:
                 print('Warning: Could not find %s in checkpoint!' % k)
-        scalars = {k: v for k, v in state_dict.items()
-                    if k not in self.module_dict}
+        """
+        for k, v in self.module_dict.items():
+            if k in state_dict:
+                #if False:
+                if k == 'model':
+                    pretrained_dict = state_dict[k]
+                    model_dict = v.state_dict()
+                    new_pretrained_dict = {
+                        key: val
+                        for key, val in pretrained_dict.items()
+                        if key in model_dict
+                        and model_dict[key].shape == pretrained_dict[key].shape
+                    }
+                    diff = set(pretrained_dict.keys()) - set(
+                        new_pretrained_dict.keys())
+                    print('ignored parameters')
+                    for key in diff:
+                        print(key)
+                    pretrained_dict_new_param = {
+                        key: val
+                        for key, val in model_dict.items()
+                        if key not in new_pretrained_dict
+                    }
+                    print('new parameters')
+                    for key in pretrained_dict_new_param:
+                        print(key)
+                    new_pretrained_dict.update(pretrained_dict_new_param)
+                    v.load_state_dict(new_pretrained_dict)
+                else:
+                    v.load_state_dict(state_dict[k])
+        scalars = {
+            k: v
+            for k, v in state_dict.items() if k not in self.module_dict
+        }
         return scalars
+
 
 def is_url(url):
     scheme = urllib.parse.urlparse(url).scheme

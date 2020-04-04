@@ -1,9 +1,9 @@
 import yaml
 from torchvision import transforms
 from im2mesh import data
-from im2mesh import onet, r2n2, psgn, pix2mesh, dmc
+from im2mesh import onet, r2n2, psgn, pix2mesh, dmc, pnet
 from im2mesh import preprocess
-
+from torch.utils import data as torch_data
 
 method_dict = {
     'onet': onet,
@@ -11,6 +11,7 @@ method_dict = {
     'psgn': psgn,
     'pix2mesh': pix2mesh,
     'dmc': dmc,
+    'pnet': pnet,
 }
 
 
@@ -72,8 +73,9 @@ def get_model(cfg, device=None, dataset=None):
         dataset (dataset): dataset
     '''
     method = cfg['method']
-    model = method_dict[method].config.get_model(
-        cfg, device=device, dataset=dataset)
+    model = method_dict[method].config.get_model(cfg,
+                                                 device=device,
+                                                 dataset=dataset)
     return model
 
 
@@ -88,8 +90,8 @@ def get_trainer(model, optimizer, cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    trainer = method_dict[method].config.get_trainer(
-        model, optimizer, cfg, device)
+    trainer = method_dict[method].config.get_trainer(model, optimizer, cfg,
+                                                     device)
     return trainer
 
 
@@ -147,30 +149,35 @@ def get_dataset(mode, cfg, return_idx=False, return_category=False):
             fields['category'] = data.CategoryField()
 
         dataset = data.Shapes3dDataset(
-            dataset_folder, fields,
+            dataset_folder,
+            fields,
             split=split,
             categories=categories,
         )
     elif dataset_type == 'kitti':
-        dataset = data.KittiDataset(
-            dataset_folder, img_size=cfg['data']['img_size'],
-            return_idx=return_idx
-        )
+        dataset = data.KittiDataset(dataset_folder,
+                                    img_size=cfg['data']['img_size'],
+                                    return_idx=return_idx)
     elif dataset_type == 'online_products':
         dataset = data.OnlineProductDataset(
-            dataset_folder, img_size=cfg['data']['img_size'],
+            dataset_folder,
+            img_size=cfg['data']['img_size'],
             classes=cfg['data']['classes'],
             max_number_imgs=cfg['generation']['max_number_imgs'],
-            return_idx=return_idx, return_category=return_category
-        )
+            return_idx=return_idx,
+            return_category=return_category)
     elif dataset_type == 'images':
         dataset = data.ImageDataset(
-            dataset_folder, img_size=cfg['data']['img_size'],
+            dataset_folder,
+            img_size=cfg['data']['img_size'],
             return_idx=return_idx,
         )
     else:
         raise ValueError('Invalid dataset "%s"' % cfg['data']['dataset'])
- 
+
+    if 'debug' in cfg['data']:
+        dataset = torch_data.Subset(dataset,
+                                    range(cfg['data']['debug']['sample_n']))
     return dataset
 
 
@@ -188,13 +195,14 @@ def get_inputs_field(mode, cfg):
         inputs_field = None
     elif input_type == 'img':
         if mode == 'train' and cfg['data']['img_augment']:
-            resize_op = transforms.RandomResizedCrop(
-                cfg['data']['img_size'], (0.75, 1.), (1., 1.))
+            resize_op = transforms.RandomResizedCrop(cfg['data']['img_size'],
+                                                     (0.75, 1.), (1., 1.))
         else:
             resize_op = transforms.Resize((cfg['data']['img_size']))
 
         transform = transforms.Compose([
-            resize_op, transforms.ToTensor(),
+            resize_op,
+            transforms.ToTensor(),
         ])
 
         with_camera = cfg['data']['img_with_camera']
@@ -204,29 +212,25 @@ def get_inputs_field(mode, cfg):
         else:
             random_view = False
 
-        inputs_field = data.ImagesField(
-            cfg['data']['img_folder'], transform,
-            with_camera=with_camera, random_view=random_view
-        )
+        inputs_field = data.ImagesField(cfg['data']['img_folder'],
+                                        transform,
+                                        with_camera=with_camera,
+                                        random_view=random_view)
     elif input_type == 'pointcloud':
         transform = transforms.Compose([
             data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
             data.PointcloudNoise(cfg['data']['pointcloud_noise'])
         ])
         with_transforms = cfg['data']['with_transforms']
-        inputs_field = data.PointCloudField(
-            cfg['data']['pointcloud_file'], transform,
-            with_transforms=with_transforms
-        )
+        inputs_field = data.PointCloudField(cfg['data']['pointcloud_file'],
+                                            transform,
+                                            with_transforms=with_transforms)
     elif input_type == 'voxels':
-        inputs_field = data.VoxelsField(
-            cfg['data']['voxels_file']
-        )
+        inputs_field = data.VoxelsField(cfg['data']['voxels_file'])
     elif input_type == 'idx':
         inputs_field = data.IndexField()
     else:
-        raise ValueError(
-            'Invalid input type (%s)' % input_type)
+        raise ValueError('Invalid input type (%s)' % input_type)
     return inputs_field
 
 

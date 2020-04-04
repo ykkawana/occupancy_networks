@@ -1,0 +1,3 @@
+inherit_from: configs/img/onet.yaml
+data:
+  classes: ['02691156'] # plane

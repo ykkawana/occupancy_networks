@@ -1,0 +1,29 @@
+# files
+*.png
+*.jpg
+*.bmp
+*.jpeg
+*.pkl
+*.p
+*.log
+*.out
+*.pth
+*.pytest_cache
+*.obj
+
+# dotenv
+.env
+
+**/__pycache__/
+
+# dev
+env/
+.vscode
+wandb
+
+*.egg
+*.egg-info/
+
+external/
+!external/QuaterNet
+!external/*.py

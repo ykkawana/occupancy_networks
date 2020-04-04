@@ -1,0 +1,60 @@
+data:
+  classes:
+  - 02691156
+  img_folder: img_choy2016
+  img_size: 224
+  path: data/ShapeNet
+  pointcloud_target_n: 2048
+  points_subsample: 2048
+  primitive_points_sample_n: 20
+generation:
+  batch_size: 100000
+  n_x: 128
+  n_z: 1
+  refine: false
+  resolution_0: 32
+  upsampling_steps: 2
+method: pnet
+model:
+  c_dim: 256
+  decoder: simplest
+  decoder_kwargs:
+    is_feature_angles: true
+    is_feature_coord: true
+    is_feature_radius: false
+    is_quadrics: false
+    is_single_paramnet: false
+    is_skip: true
+    is_sphere: true
+    is_train_periodic_shape_sampler: false
+    layer_depth: 4
+    max_m: 0
+    n_primitives: 10
+    paramnet_class: ParamNetResNetBlockWOBatchNorm
+    paramnet_hidden_size: 128
+    shape_sampler_decoder_class: PrimitiveWiseGroupConvDecoder
+    shape_sampler_decoder_factor: 2
+    skip_position: 3
+    transition_range: 3
+  encoder: resnet18
+  encoder_latent: null
+  z_dim: 0
+test:
+  eval_mesh: true
+  eval_pointcloud: false
+  threshold: 0.5
+trainer:
+  chamfer_loss_coef: 0
+  occupancy_loss_coef: 1
+  overlap_reg_coef: 1
+  overlap_reg_threshold: 1.2
+  pnet_point_scale: 6
+  self_overlap_reg_coef: 1
+  self_overlap_reg_threshold: 0.1
+training:
+  batch_size: 64
+  model_selection_metric: iou
+  model_selection_mode: maximize
+  out_dir: out/img/pnet_hps_6
+  validate_every: 5000
+  visualize_every: 5000

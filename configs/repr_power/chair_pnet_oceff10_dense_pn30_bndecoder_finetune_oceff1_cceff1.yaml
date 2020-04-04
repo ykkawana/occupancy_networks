@@ -1,0 +1,59 @@
+method: pnet
+data:
+  path: data/ShapeNet
+  input_type: idx
+  classes: ['03001627']
+  train_split: train
+  test_split: train
+  val_split: train
+  points_subsample: 1024
+  pointcloud_target_n: 2048
+  primitive_points_sample_n: 20 # will be powered by dim - 1, if dim == 3, then 900
+model:
+  encoder_latent: simple
+  decoder: simplest
+  encoder: idx
+  c_dim: 512
+  z_dim: 0
+  decoder_kwargs:
+    max_m: 0
+    n_primitives: 30
+    is_train_periodic_shape_sampler: true
+    is_quadrics: false
+    is_sphere: true
+    shape_sampler_decoder_factor: 2
+    transition_range: 3
+    shape_sampler_decoder_class: BatchNormDecoder #ShapeDecoderCBatchNorm
+    paramnet_class: ParamNet
+    paramnet_dense: true
+    is_feature_radius: false
+    is_feature_coord: false
+    is_feature_angles: true
+trainer:
+  overlap_reg_coef: 1
+  self_overlap_reg_coef: 1
+  occupancy_loss_coef: 1
+  chamfer_loss_coef: 1
+  pnet_point_scale: 6 #periodic net works well if point scale is multiplied by 6
+  overlap_reg_threshold: 1.2
+  self_overlap_reg_threshold: 0.1
+training:
+  out_dir:  out/repr_power/chair_pnet_oceff10_dense_pn30_bndecoder_finetune_oceff1_cceff1
+  batch_size: 64
+  model_selection_metric: iou
+  model_selection_mode: maximize
+  visualize_every: 5000
+  validate_every: 500
+  checkpoint_every: 10000
+test:
+  threshold: 0.5
+  eval_mesh: true
+  eval_pointcloud: false
+generation:
+  batch_size: 100000
+  refine: false
+  n_x: 128
+  n_z: 1
+  resolution_0: 32 
+  upsampling_steps: 2
+
