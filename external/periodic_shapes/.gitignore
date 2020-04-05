@@ -24,6 +24,3 @@ wandb
 *.egg
 *.egg-info/
 
-external/
-!external/QuaterNet
-!external/*.py
