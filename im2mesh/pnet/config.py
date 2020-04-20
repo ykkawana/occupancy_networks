@@ -26,6 +26,10 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
     encoder_kwargs = cfg['model']['encoder_kwargs']
     encoder_latent_kwargs = cfg['model']['encoder_latent_kwargs']
 
+    decoder_kwargs['return_sdf'] = cfg['trainer'].get('is_sdf', False)
+    decoder_kwargs['is_radius_reg'] = cfg['trainer'].get(
+        'is_radius_reg', False)
+
     decoder = models.decoder_dict[decoder](dim=dim,
                                            z_dim=z_dim,
                                            c_dim=c_dim,
@@ -100,6 +104,9 @@ def get_generator(model, cfg, device, **kwargs):
         refinement_step=cfg['generation']['refinement_step'],
         simplify_nfaces=cfg['generation']['simplify_nfaces'],
         preprocessor=preprocessor,
+        pnet_point_scale=cfg['trainer']['pnet_point_scale'],
+        is_explicit_mesh=cfg['generation'].get('is_explicit_mesh', False),
+        **cfg['generation'].get('mesh_kwargs', {}),
     )
     return generator
 
@@ -126,6 +133,8 @@ def get_data_fields(mode, cfg):
         cfg (dict): imported yaml config
     '''
     points_transform = data.SubsamplePoints(cfg['data']['points_subsample'])
+    if cfg.get('sdf_generation', False):
+        points_transform = None
     with_transforms = cfg['model']['use_camera']
 
     fields = {}
@@ -136,8 +145,18 @@ def get_data_fields(mode, cfg):
         unpackbits=cfg['data']['points_unpackbits'],
     )
 
+    if not cfg.get('sdf_generation', False):
+        sdf_points_transform = data.SubsampleSDFPoints(
+            cfg['data']['points_subsample'])
+        fields['sdf_points'] = data.SDFPointsField(
+            cfg['data']['sdf_points_file'],
+            sdf_points_transform,
+            with_transforms=with_transforms)
+
     pointcloud_transform = data.SubsamplePointcloud(
         cfg['data']['pointcloud_target_n'])
+    if cfg.get('sdf_generation', False):
+        pointcloud_transform = None
 
     fields['pointcloud'] = data.PointCloudField(cfg['data']['pointcloud_file'],
                                                 pointcloud_transform,
@@ -146,8 +165,11 @@ def get_data_fields(mode, cfg):
         cfg['data']['primitive_points_sample_n'],
         mode,
         is_normal_icosahedron=cfg['data'].get('is_normal_icosahedron', False),
+        is_normal_uv_sphere=cfg['data'].get('is_normal_uv_sphere', False),
         icosahedron_subdiv=cfg['data'].get('icosahedron_subdiv', 2),
         icosahedron_uv_margin=cfg['data'].get('icosahedron_uv_margin', 1e-5),
+        icosahedron_uv_margin_phi=cfg['data'].get('icosahedron_uv_margin_phi',
+                                                  1e-5),
         uv_sphere_length=cfg['data'].get('uv_sphere_length', 20),
         normal_mesh_no_invert=cfg['data'].get('normal_mesh_no_invert', False))
     if mode in ('val', 'test'):

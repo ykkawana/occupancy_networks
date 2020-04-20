@@ -5,17 +5,16 @@ from tqdm import tqdm
 import pandas as pd
 import trimesh
 import torch
+from torch.utils import data as torch_data
 from im2mesh import config, data
 from im2mesh.eval import MeshEvaluator
 from im2mesh.utils.io import load_pointcloud
-
-
-parser = argparse.ArgumentParser(
-    description='Evaluate mesh algorithms.'
-)
+import numpy as np
+parser = argparse.ArgumentParser(description='Evaluate mesh algorithms.')
 parser.add_argument('config', type=str, help='Path to config file.')
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
-parser.add_argument('--eval_input', action='store_true',
+parser.add_argument('--eval_input',
+                    action='store_true',
                     help='Evaluate inputs instead.')
 
 args = parser.parse_args()
@@ -23,24 +22,33 @@ cfg = config.load_config(args.config, 'configs/default.yaml')
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
 
+is_eval_explicit_mesh = cfg['test'].get('is_eval_explicit_mesh', False)
+
 # Shorthands
-out_dir = cfg['training']['out_dir']
+out_dir = os.path.dirname(args.config)
+#out_dir = cfg['training']['out_dir']
 generation_dir = os.path.join(out_dir, cfg['generation']['generation_dir'])
 if not args.eval_input:
-    out_file = os.path.join(generation_dir, 'eval_meshes_full.pkl')
-    out_file_class = os.path.join(generation_dir, 'eval_meshes.csv')
+    out_file = os.path.join(
+        generation_dir, 'eval_meshes_full{}.pkl'.format(
+            '_explicit' if is_eval_explicit_mesh else ''))
+    out_file_class = os.path.join(
+        generation_dir, 'eval_meshes{}.csv'.format(
+            '_explicit' if is_eval_explicit_mesh else ''))
 else:
-    out_file = os.path.join(generation_dir, 'eval_input_full.pkl')
-    out_file_class = os.path.join(generation_dir, 'eval_input.csv')
+    out_file = os.path.join(
+        generation_dir, 'eval_input_full{}.pkl'.format(
+            '_explicit' if is_eval_explicit_mesh else ''))
+    out_file_class = os.path.join(
+        generation_dir, 'eval_input{}.csv'.format(
+            '_explicit' if is_eval_explicit_mesh else ''))
 
 # Dataset
 points_field = data.PointsField(
-    cfg['data']['points_iou_file'], 
+    cfg['data']['points_iou_file'],
     unpackbits=cfg['data']['points_unpackbits'],
 )
-pointcloud_field = data.PointCloudField(
-    cfg['data']['pointcloud_chamfer_file']
-)
+pointcloud_field = data.PointCloudField(cfg['data']['pointcloud_chamfer_file'])
 fields = {
     'points_iou': points_field,
     'pointcloud_chamfer': pointcloud_field,
@@ -50,17 +58,23 @@ fields = {
 print('Test split: ', cfg['data']['test_split'])
 
 dataset_folder = cfg['data']['path']
-dataset = data.Shapes3dDataset(
-    dataset_folder, fields,
-    cfg['data']['test_split'],
-    categories=cfg['data']['classes'])
+dataset = data.Shapes3dDataset(dataset_folder,
+                               fields,
+                               cfg['data']['test_split'],
+                               categories=cfg['data']['classes'])
+
+if 'debug' in cfg['data']:
+    dataset = torch_data.Subset(dataset,
+                                range(cfg['data']['debug']['sample_n']))
 
 # Evaluator
 evaluator = MeshEvaluator(n_points=100000)
 
 # Loader
-test_loader = torch.utils.data.DataLoader(
-    dataset, batch_size=1, num_workers=0, shuffle=False)
+test_loader = torch.utils.data.DataLoader(dataset,
+                                          batch_size=1,
+                                          num_workers=0,
+                                          shuffle=False)
 
 # Evaluate all classes
 eval_dicts = []
@@ -85,7 +99,7 @@ for it, data in enumerate(tqdm(test_loader)):
         model_dict = dataset.get_model_dict(idx)
     except AttributeError:
         model_dict = {'model': str(idx), 'category': 'n/a'}
-    
+
     modelname = model_dict['model']
     category_id = model_dict['category']
 
@@ -118,10 +132,24 @@ for it, data in enumerate(tqdm(test_loader)):
     if cfg['test']['eval_mesh']:
         mesh_file = os.path.join(mesh_dir, '%s.off' % modelname)
 
+        if is_eval_explicit_mesh:
+            visbility_file = os.path.join(
+                mesh_dir, '%s_vertex_visbility.npz' % modelname)
         if os.path.exists(mesh_file):
             mesh = trimesh.load(mesh_file, process=False)
+            if is_eval_explicit_mesh:
+                vertex_visibility = np.load(
+                    visbility_file)['vertex_visibility']
+            else:
+                vertex_visibility = None
             eval_dict_mesh = evaluator.eval_mesh(
-                mesh, pointcloud_tgt, normals_tgt, points_tgt, occ_tgt)
+                mesh,
+                pointcloud_tgt,
+                normals_tgt,
+                points_tgt,
+                occ_tgt,
+                is_eval_explicit_mesh=is_eval_explicit_mesh,
+                vertex_visibility=vertex_visibility)
             for k, v in eval_dict_mesh.items():
                 eval_dict[k + ' (mesh)'] = v
         else:
@@ -129,18 +157,16 @@ for it, data in enumerate(tqdm(test_loader)):
 
     # Evaluate point cloud
     if cfg['test']['eval_pointcloud']:
-        pointcloud_file = os.path.join(
-            pointcloud_dir, '%s.ply' % modelname)
+        pointcloud_file = os.path.join(pointcloud_dir, '%s.ply' % modelname)
 
         if os.path.exists(pointcloud_file):
             pointcloud = load_pointcloud(pointcloud_file)
-            eval_dict_pcl = evaluator.eval_pointcloud(
-                pointcloud, pointcloud_tgt)
+            eval_dict_pcl = evaluator.eval_pointcloud(pointcloud,
+                                                      pointcloud_tgt)
             for k, v in eval_dict_pcl.items():
                 eval_dict[k + ' (pcl)'] = v
         else:
-            print('Warning: pointcloud does not exist: %s'
-                    % pointcloud_file)
+            print('Warning: pointcloud does not exist: %s' % pointcloud_file)
 
 # Create pandas dataframe and save
 eval_df = pd.DataFrame(eval_dicts)

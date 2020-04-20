@@ -21,8 +21,8 @@ model:
 training:
   out_dir:  out/img/test
   batch_size: 10
-  visualize_every: 500
-  validate_every: 100
+  visualize_every: 100
+  validate_every: 1000
   checkpoint_every: 10000
   wandb_resume: null
   skip_load_pretrained_optimizer: true

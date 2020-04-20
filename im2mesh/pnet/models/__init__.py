@@ -109,9 +109,6 @@ class PeriodicShapeNetwork(nn.Module):
 
         assert angles is not None
         return self.decoder(p, z, c, angles=angles, **kwargs)
-        logits = self.decoder(p, z, c, **kwargs)
-        p_r = dist.Bernoulli(logits=logits)
-        return p_r
 
     def infer_z(self, p, occ, c, **kwargs):
         ''' Infers z.

@@ -75,7 +75,7 @@ def train(gpu_idx, args):
     if rank == 0:
         val_loader = torch.utils.data.DataLoader(
             val_dataset,
-            batch_size=2,
+            batch_size=cfg['training']['val_batch_size'],
             num_workers=4,
             shuffle=False,
             collate_fn=data.collate_remove_none,
@@ -84,7 +84,7 @@ def train(gpu_idx, args):
         # For visualizations
         vis_loader = torch.utils.data.DataLoader(
             val_dataset,
-            batch_size=12,
+            batch_size=cfg['training']['vis_batch_size'],
             shuffle=False,
             collate_fn=data.collate_remove_none,
             worker_init_fn=data.worker_init_fn)

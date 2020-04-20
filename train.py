@@ -57,10 +57,15 @@ if not os.path.exists(out_dir):
 train_dataset = config.get_dataset('train', cfg)
 val_dataset = config.get_dataset('val', cfg)
 
+if 'debug' in cfg['data']:
+    train_shuffle = cfg['data']['debug'].get('train_shuffle', False)
+else:
+    train_shuffle = True
+
 train_loader = torch.utils.data.DataLoader(train_dataset,
                                            batch_size=batch_size,
                                            num_workers=4,
-                                           shuffle=True,
+                                           shuffle=train_shuffle,
                                            collate_fn=data.collate_remove_none,
                                            worker_init_fn=data.worker_init_fn,
                                            drop_last=True)
@@ -75,7 +80,8 @@ val_loader = torch.utils.data.DataLoader(
 
 # For visualizations
 vis_loader = torch.utils.data.DataLoader(val_dataset,
-                                         batch_size=5,
+                                         batch_size=cfg['training'].get(
+                                             'vis_batch_size', 1),
                                          shuffle=False,
                                          collate_fn=data.collate_remove_none,
                                          worker_init_fn=data.worker_init_fn)

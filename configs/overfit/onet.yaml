@@ -1,0 +1,38 @@
+method: onet
+data:
+  input_type: idx
+  classes:
+    - 02691156
+  path: data/ShapeNet
+  train_split: test
+  test_split: test
+  val_split: test
+  points_subsample: 1024
+model:
+  encoder_latent: simple
+  decoder: cbatchnorm
+  encoder: idx
+  decoder_kwargs:
+    legacy: true
+  c_dim: 1
+  z_dim: 0
+  use_poincloud: false
+training:
+  out_dir:  out/overfit/onet_1024
+  batch_size: 1
+  val_batch_size: 1
+  visualize_every: 100
+  validate_every: 1000 
+  model_selection_metric: iou
+  model_selection_mode: maximize
+  learning_rate: 1e-4
+test:
+  model_file: model.pt
+  threshold: 0.5
+  eval_mesh: true
+generation:
+  split: train
+  batch_size: 100000
+  refine: false
+  n_x: 128
+  n_z: 1

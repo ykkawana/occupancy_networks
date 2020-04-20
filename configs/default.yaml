@@ -8,6 +8,7 @@ data:
   val_split: val
   test_split: test
   dim: 3
+  sdf_points_file: sdf_points.npz
   points_file: points.npz
   points_iou_file: points.npz
   points_subsample: 1024
@@ -42,6 +43,7 @@ training:
   out_dir:  out/default
   batch_size: 64
   val_batch_size: 64
+  vis_batch_size: 5
   print_every: 10
   visualize_every: 2000
   checkpoint_every: 1000
@@ -58,6 +60,8 @@ test:
   threshold: 0.5
   eval_mesh: true
   eval_pointcloud: true
+  eval_fscore: true
+  fscore_thresholds: [0.005, 0.01, 0.0107337006427915, 0.02, 0.05, 0.1, 0.2]
   model_file: model_best.pt
 generation:
   batch_size: 100000

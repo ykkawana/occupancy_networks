@@ -9,6 +9,7 @@ def polar2cartesian(radius, angles):
         r: radius (B, N, P, 1 or 2) last dim is one in 2D mode, two in 3D.
         angles: angle (B, 1, P, 1 or 2) 
     """
+    #print('radius angles in s2c mean', radius[..., -1].mean(), angles.mean())
     dim = radius.shape[-1]
     dim2 = angles.shape[-1]
     P = radius.shape[-2]
@@ -41,6 +42,7 @@ def sphere2cartesian(radius, angles):
         r: radius (B, N, P, 1 or 2) last dim is one in 2D mode, two in 3D.
         angles: angle (B, 1, P, 1 or 2) 
     """
+    #print('radius angles in s2c mean', radius[..., 0].mean(), angles.mean())
     dim = radius.shape[-1]
     dim2 = angles.shape[-1]
     P = radius.shape[-2]
@@ -74,16 +76,18 @@ def cartesian2sphere(coord):
     x = coord[..., 0]
     y = coord[..., 1]
     z = torch.zeros([1], device=coord.device) if dim == 2 else coord[..., 2]
-    x_non_zero = torch.where(x == 0, x.sign() * EPS, x)
+    x_non_zero = torch.where(x == 0, x + EPS, x)
     theta = torch.atan2(y, x_non_zero)
 
     assert not torch.isnan(theta).any(), (theta)
-    r = (coord**2).sum(-1).sqrt()
+    r = (coord**2).sum(-1).clamp(min=EPS).sqrt()
+    assert not torch.isnan(r).any(), (r)
 
-    xysq = (x_non_zero**2 + y**2).sqrt()
+    xysq_non_zero = (x**2 + y**2).clamp(min=EPS).sqrt()
     #xysq_non_zero = torch.where(xysq == 0, EPS + xysq, xysq)
-    xysq_non_zero = xysq.clamp(min=EPS)
-    phi = torch.atan(z / xysq_non_zero)
+    #xysq_non_zero = xysq.clamp(min=EPS)
+    #phi = torch.atan(z / xysq_non_zero)
+    phi = torch.atan2(z, xysq_non_zero)
 
     assert not torch.isnan(phi).any(), (phi)
 

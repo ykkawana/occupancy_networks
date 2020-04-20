@@ -112,7 +112,6 @@ class BaseShapeSampler(nn.Module):
                 scaled_cartesian_coord, rotation)
         else:
             rotated_cartesian_coord = scaled_cartesian_coord
-        assert not torch.isnan(rotated_cartesian_coord).any()
         posed_cartesian_coord = rotated_cartesian_coord + transition.view(
             B, self.n_primitives, 1, self.dim)
         assert not torch.isnan(posed_cartesian_coord).any()
@@ -221,6 +220,42 @@ class BaseShapeSampler(nn.Module):
 
         # (B, N, P)
         return r1, r2, theta, phi
+
+    def cartesian2sphere(self, coord, params, *args, **kwargs):
+        """Convert polar coordinate to cartesian coordinate.
+        Args:
+            coord: (B, N, P, D)
+        """
+        dim = coord.shape[-1]
+        B, _, P, dim = coord.shape
+        x = coord[..., 0]
+        y = coord[..., 1]
+        z = torch.zeros([1], device=coord.device) if dim == 2 else coord[...,
+                                                                         2]
+        x_non_zero = torch.where(x == 0, x + EPS, x)
+        theta = torch.atan2(y, x_non_zero)
+
+        assert not torch.isnan(theta).any(), (theta)
+        #r = (coord**2).sum(-1).clamp(min=EPS).sqrt()
+        r = self.get_r_check_shape(theta.view(B, self.n_primitives, P, 1),
+                                   params, *args, **kwargs)[..., 0]
+        #print('r in c2p', r.mean())
+        assert not torch.isnan(r).any(), (r)
+
+        xysq_non_zero = (x_non_zero**2 + y**2).clamp(min=EPS).sqrt()
+        #xysq_non_zero = torch.where(xysq == 0, EPS + xysq, xysq)
+        #xysq_non_zero = xysq.clamp(min=EPS)
+        #phi = torch.atan(z / xysq_non_zero)
+        phi = torch.atan2(z, xysq_non_zero)
+        #phi = torch.atan(xysq_non_zero / z)
+        #phi = torch.acos((z / r_phi))
+
+        assert not torch.isnan(phi).any(), (phi)
+
+        # (B, N, P)
+        return r.unsqueeze(-1).expand([*coord.shape[:-1],
+                                       dim - 1]), torch.stack([theta, phi],
+                                                              axis=-1)
 
     def extract_super_shapes_surface_point(self, super_shape_point,
                                            primitive_params, *args, **kwargs):

@@ -4,11 +4,11 @@ from im2mesh.data.core import (
 )
 from im2mesh.data.fields import (
     IndexField, CategoryField, ImagesField, PointsField,
-    VoxelsField, PointCloudField, MeshField, SphericalCoordinateField
+    VoxelsField, PointCloudField, MeshField, SphericalCoordinateField, RawIDField, SDFPointsField, PlanarPatchField
 )
 from im2mesh.data.transforms import (
     PointcloudNoise, SubsamplePointcloud,
-    SubsamplePoints
+    SubsamplePoints, SubsampleSDFPoints
 )
 from im2mesh.data.real import (
     KittiDataset, OnlineProductDataset,
@@ -24,12 +24,15 @@ __all__ = [
     # Fields
     IndexField,
     CategoryField,
+    RawIDField,
+    SDFPointsField,
     ImagesField,
     PointsField,
     VoxelsField,
     PointCloudField,
     MeshField,
     SphericalCoordinateField,
+    PlanarPatchField,
     # Transforms
     PointcloudNoise,
     SubsamplePointcloud,

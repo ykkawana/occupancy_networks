@@ -1,7 +1,7 @@
 import yaml
 from torchvision import transforms
 from im2mesh import data
-from im2mesh import onet, r2n2, psgn, pix2mesh, dmc, pnet
+from im2mesh import onet, r2n2, psgn, pix2mesh, dmc, pnet, atlasnetv2
 from im2mesh import preprocess
 from torch.utils import data as torch_data
 
@@ -12,6 +12,7 @@ method_dict = {
     'pix2mesh': pix2mesh,
     'dmc': dmc,
     'pnet': pnet,
+    'atlasnetv2': atlasnetv2
 }
 
 
@@ -229,6 +230,8 @@ def get_inputs_field(mode, cfg):
         inputs_field = data.VoxelsField(cfg['data']['voxels_file'])
     elif input_type == 'idx':
         inputs_field = data.IndexField()
+    elif input_type == 'raw_id':
+        inputs_field = data.RawIDField()
     else:
         raise ValueError('Invalid input type (%s)' % input_type)
     return inputs_field

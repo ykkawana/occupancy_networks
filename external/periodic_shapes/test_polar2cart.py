@@ -10,8 +10,8 @@ print(radius2.shape, angles2.shape)
 coord2 = super_shape_functions.sphere2cartesian(radius2, angles2)
 print(coord)
 print(coord2)
-assert torch.all(torch.eq(radius.mean(), radius2.mean()))
 assert torch.allclose(coord, coord2), (coord - coord2)
+assert torch.all(torch.eq(radius.mean(), radius2.mean()))
 assert torch.allclose(
     angles[..., 0].sin(),
     angles2[...,

@@ -780,10 +780,11 @@ def test_decoder_consistency_OtherDecoders():
         decoder_class='PrimitiveWiseGroupConvDecoder',
         #decoder_class='BatchNormDecoderSharedWeight',
         #decoder_class='PrimitiveWiseGroupConvDecoderLegacy',
-        last_scale=.1,
+        last_scale=10,
         no_encoder=True,
         is_shape_sampler_sphere=True,
-        is_feature_coord=False,
+        spherical_angles=True,
+        is_feature_coord=True,
         is_feature_angles=False,
         is_feature_radius=False,
         dim=dim)
@@ -832,4 +833,91 @@ def test_decoder_consistency_OtherDecoders():
                               atol=1e-5), (sgn.max(), sgn.min(), sgn.median(),
                                            sgn.mean())
 
-    assert False
+
+def test_decoder_sdf_consistency_OtherDecoders():
+    batch = 3
+    m = 3
+    n = 1
+    n1 = 1
+    n2 = 10
+    n3 = 3
+    a = 1
+    b = 1
+    theta = math.pi / 2.
+    sample_num = 200
+    points_num = 5
+    P = 10
+
+    dim = 3
+
+    rotations = [[0., 0., 0.]] * n
+    #rotations = [[0., math.pi / 2, 0.]] * n
+    #rotations = [[0., math.pi / 2., math.pi / 2.],
+    #             [0., math.pi / 2., math.pi / 4.], [0., math.pi, math.pi / 2.]]
+    transitions = [[0., 0., 0.]] * n
+    #transitions = [[0., 1., 0.], [0., 1., 10.], [0., 1., 1.]]
+    linear_scales = [[1., 1., 1.]] * n
+    #linear_scales = [[1., 1., 1.], [0.2, 0.8, 1.2], [1., 1.2, 2.2]]
+
+    sampler = periodic_shape_sampler.PeriodicShapeSampler(
+        points_num,
+        m,
+        n,
+        #decoder_class='MLPDecoder',
+        #decoder_class='BatchNormDecoder',
+        decoder_class='PrimitiveWiseGroupConvDecoder',
+        #decoder_class='BatchNormDecoderSharedWeight',
+        #decoder_class='PrimitiveWiseGroupConvDecoderLegacy',
+        last_scale=10,
+        no_encoder=True,
+        is_shape_sampler_sphere=True,
+        spherical_angles=False,
+        is_feature_coord=True,
+        is_feature_angles=False,
+        is_feature_radius=False,
+        return_sdf=False,
+        dim=dim)
+    preset_params = utils.generate_multiple_primitive_params(
+        m,
+        n1,
+        n2,
+        n3,
+        a,
+        b,
+        rotations_angle=rotations,
+        transitions=transitions,
+        linear_scales=linear_scales,
+        nn=n,
+        batch=batch)
+
+    batched_theta_test_tensor = utils.sample_spherical_angles(
+        sample_num=P, batch=batch, sgn_convertible=True, dim=dim)
+
+    batched_points = torch.rand([batch, points_num]).float()
+
+    # B, N, P
+    radius = sampler.transform_circumference_angle_to_super_shape_radius(
+        batched_theta_test_tensor, preset_params, points=batched_points)
+    # B, P, dim
+    coords = sampler.transform_circumference_angle_to_super_shape_world_cartesian_coord(
+        batched_theta_test_tensor,
+        radius,
+        preset_params,
+        points=batched_points)
+
+    print('coord mean main', coords.mean(), (coords**2).sum(-1).sqrt().mean())
+
+    print('check coord')
+    sgn = sampler.transform_world_cartesian_coord_to_tsd(coords.view(
+        batch, -1, dim),
+                                                         preset_params,
+                                                         points=batched_points)
+    print('check coord done')
+    for idx in range(n):
+        coord = coords[:, idx, :, :]
+        sgn = sampler.transform_world_cartesian_coord_to_tsd(
+            coord, preset_params, points=batched_points)[:, idx, :]
+        print(sgn.shape)
+        assert torch.allclose(sgn, torch.zeros_like(sgn),
+                              atol=1e-5), (sgn.max(), sgn.min(), sgn.median(),
+                                           sgn.mean())

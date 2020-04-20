@@ -5,7 +5,7 @@ data:
   img_size: 224 
   points_subsample: 2048 
   pointcloud_target_n: 4096
-  primitive_points_sample_n: 20 # will be powered by dim - 1, if dim == 3, then 900
+  primitive_points_sample_n: 12 # will be powered by dim - 1, if dim == 3, then 900
   is_normal_icosahedron: false
   icosahedron_subdiv: 2
   icosahedron_uv_margin: 0.00001
@@ -45,7 +45,7 @@ trainer:
 training:
   out_dir:  out/img/pnet_finetue_only_transition_cceff10_pn30_target_n_4096_no_overlap_reg
   batch_size: 20
-  val_batch_size: 2
+  val_batch_size: 1
   model_selection_metric: iou
   model_selection_mode: maximize
   visualize_every: 1000

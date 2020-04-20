@@ -7,6 +7,7 @@ import trimesh
 from im2mesh.data.core import Field
 from im2mesh.utils import binvox_rw
 from periodic_shapes import utils
+from im2mesh.atlasnetv2 import utils as atv2_utils
 import torch
 
 
@@ -173,7 +174,7 @@ class PointsField(Field):
             'occ': occupancies,
         }
 
-        if self.with_transforms:
+        if self.with_transforms and 'loc' in data and 'scale' in data:
             data['loc'] = points_dict['loc'].astype(np.float32)
             data['scale'] = points_dict['scale'].astype(np.float32)
 
@@ -262,7 +263,7 @@ class PointCloudField(Field):
             'normals': normals,
         }
 
-        if self.with_transforms:
+        if self.with_transforms and 'loc' in data and 'scale' in data:
             data['loc'] = pointcloud_dict['loc'].astype(np.float32)
             data['scale'] = pointcloud_dict['scale'].astype(np.float32)
 
@@ -342,8 +343,10 @@ class SphericalCoordinateField(Field):
                  primitive_points_sample_n,
                  mode,
                  is_normal_icosahedron=False,
+                 is_normal_uv_sphere=False,
                  icosahedron_subdiv=2,
                  icosahedron_uv_margin=1e-5,
+                 icosahedron_uv_margin_phi=1e-5,
                  uv_sphere_length=20,
                  normal_mesh_no_invert=False,
                  *args,
@@ -351,6 +354,9 @@ class SphericalCoordinateField(Field):
         self.primitive_points_sample_n = primitive_points_sample_n
         self.mode = mode
         self.is_normal_icosahedron = is_normal_icosahedron
+        self.is_normal_uv_sphere = is_normal_uv_sphere
+        self.icosahedron_uv_margin = icosahedron_uv_margin
+        self.icosahedron_uv_margin_phi = icosahedron_uv_margin_phi
 
         if self.is_normal_icosahedron:
             icosamesh = trimesh.creation.icosphere(
@@ -371,6 +377,27 @@ class SphericalCoordinateField(Field):
             self.angles_for_nomal = torch.stack([uv_th, uv_ph], axis=-1)
             self.face_for_normal = torch.from_numpy(icosamesh.faces)
 
+        elif self.is_normal_uv_sphere:
+            thetas = utils.sample_spherical_angles(
+                batch=1,
+                sample_num=uv_sphere_length,
+                sampling='grid',
+                device='cpu',
+                dim=3,
+                sgn_convertible=True,
+                phi_margin=icosahedron_uv_margin_phi,
+                theta_margin=icosahedron_uv_margin)
+            mesh = trimesh.creation.uv_sphere(
+                theta=np.linspace(0, np.pi, uv_sphere_length),
+                phi=np.linspace(-np.pi, np.pi, uv_sphere_length))
+            #thetas = torch.where(thetas.abs() < icosahedron_uv_margin_phi,
+            #                     torch.tensor([icosahedron_uv_margin_phi]),
+            #                     thetas)
+            if not normal_mesh_no_invert:
+                mesh.invert()
+            self.angles_for_nomal = thetas[0]
+            self.face_for_normal = torch.from_numpy(mesh.faces)
+
     def load(self, model_path, idx, category):
         ''' Sample spherical coordinate.
 
@@ -386,11 +413,11 @@ class SphericalCoordinateField(Field):
             device='cpu',
             dim=3,  #sgn_convertible=True, phi_margin=1e-5, theta_margin=1e-5)
             sgn_convertible=True,
-            phi_margin=1e-5,
-            theta_margin=1e-5).squeeze(0)
+            phi_margin=self.icosahedron_uv_margin_phi,
+            theta_margin=self.icosahedron_uv_margin).squeeze(0)
 
         data = {None: angles}
-        if self.is_normal_icosahedron:
+        if self.is_normal_icosahedron or self.is_normal_uv_sphere:
             data.update({
                 'normal_angles': self.angles_for_nomal.clone(),
                 'normal_face': self.face_for_normal.clone()
@@ -403,3 +430,132 @@ class SphericalCoordinateField(Field):
         Returns: True
         '''
         return True
+
+
+class RawIDField(Field):
+    ''' Basic index field.'''
+    def load(self, model_path, idx, category):
+        ''' Loads the index field.
+
+        Args:
+            model_path (str): path to model
+            idx (int): ID of data point
+            category (int): index of category
+        '''
+        category_id, object_id = model_path.split('/')[-2:]
+        data = {'category': category_id, 'object': object_id}
+        return data
+
+    def check_complete(self, files):
+        ''' Check if field is complete.
+        
+        Args:
+            files: files
+        '''
+        return True
+
+
+# 3D Fields
+class SDFPointsField(Field):
+    ''' Point Field.
+
+    It provides the field to load point data. This is used for the points
+    randomly sampled in the bounding volume of the 3D shape.
+
+    Args:
+        file_name (str): file name
+        transform (list): list of transformations which will be applied to the
+            points tensor
+        with_transforms (bool): whether scaling and rotation data should be
+            provided
+
+    '''
+    def __init__(self, file_name, transform=None, with_transforms=False):
+        self.file_name = file_name
+        self.transform = transform
+        self.with_transforms = with_transforms
+
+    def load(self, model_path, idx, category):
+        ''' Loads the data point.
+
+        Args:
+            model_path (str): path to model
+            idx (int): ID of data point
+            category (int): index of category
+        '''
+        file_path = os.path.join(model_path, self.file_name)
+
+        points_dict = np.load(file_path)
+        points = points_dict['points']
+        # Break symmetry if given in float16:
+        if points.dtype == np.float16:
+            points = points.astype(np.float32)
+            points += 1e-4 * np.random.randn(*points.shape)
+        else:
+            points = points.astype(np.float32)
+
+        occupancies = points_dict['distances']
+        occupancies = occupancies.astype(np.float32)
+
+        data = {
+            None: points,
+            'distances': occupancies,
+        }
+
+        if self.with_transforms:
+            raise ValueError('data for transform not stored')
+
+        if self.transform is not None:
+            data = self.transform(data)
+
+        return data
+
+
+class PlanarPatchField(Field):
+    ''' Angle field class.
+
+    It provides the class used for spherical coordinate data.
+
+    Args:
+        file_name (str): file name
+        transform (list): list of transformations applied to data points
+    '''
+    def __init__(self,
+                 mode,
+                 patch_side_length=20,
+                 is_generate_mesh=False,
+                 *args,
+                 **kwargs):
+        self.mode = mode
+        self.patch_side_length = patch_side_length
+        self.is_generate_mesh = is_generate_mesh
+
+        if self.is_generate_mesh:
+            vertices, faces = atv2_utils.create_planar_mesh(patch_side_length)
+
+            self.vertices = torch.from_numpy(vertices)
+            self.faces = torch.from_numpy(faces)
+
+    def load(self, model_path, idx, category):
+        ''' Sample spherical coordinate.
+
+        Args:
+            model_path (str): path to model
+            idx (int): ID of data point
+            category (int): index of category
+        '''
+        plane_points = utils.generate_grid_samples(
+            [0, 1],
+            batch=1,
+            sample_num=self.patch_side_length,
+            sampling='uniform',
+            device='cpu',
+            dim=2)
+
+        data = {None: plane_points}
+        if self.is_generate_mesh:
+            data.update({
+                'mesh_vertices': self.vertices.clone(),
+                'mesh_faces': self.faces.clone()
+            })
+        return data

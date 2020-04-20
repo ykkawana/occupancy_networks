@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from im2mesh.layers import ResnetBlockFC
+from atlasnetv2.auxiliary.model import PointNetfeat
 
 
 def maxpool(x, dim=-1, keepdim=False):
@@ -16,16 +17,15 @@ class SimplePointnet(nn.Module):
         dim (int): input points dimension
         hidden_dim (int): hidden dimension of the network
     '''
-
     def __init__(self, c_dim=128, dim=3, hidden_dim=128):
         super().__init__()
         self.c_dim = c_dim
 
-        self.fc_pos = nn.Linear(dim, 2*hidden_dim)
-        self.fc_0 = nn.Linear(2*hidden_dim, hidden_dim)
-        self.fc_1 = nn.Linear(2*hidden_dim, hidden_dim)
-        self.fc_2 = nn.Linear(2*hidden_dim, hidden_dim)
-        self.fc_3 = nn.Linear(2*hidden_dim, hidden_dim)
+        self.fc_pos = nn.Linear(dim, 2 * hidden_dim)
+        self.fc_0 = nn.Linear(2 * hidden_dim, hidden_dim)
+        self.fc_1 = nn.Linear(2 * hidden_dim, hidden_dim)
+        self.fc_2 = nn.Linear(2 * hidden_dim, hidden_dim)
+        self.fc_3 = nn.Linear(2 * hidden_dim, hidden_dim)
         self.fc_c = nn.Linear(hidden_dim, c_dim)
 
         self.actvn = nn.ReLU()
@@ -66,17 +66,16 @@ class ResnetPointnet(nn.Module):
         dim (int): input points dimension
         hidden_dim (int): hidden dimension of the network
     '''
-
     def __init__(self, c_dim=128, dim=3, hidden_dim=128):
         super().__init__()
         self.c_dim = c_dim
 
-        self.fc_pos = nn.Linear(dim, 2*hidden_dim)
-        self.block_0 = ResnetBlockFC(2*hidden_dim, hidden_dim)
-        self.block_1 = ResnetBlockFC(2*hidden_dim, hidden_dim)
-        self.block_2 = ResnetBlockFC(2*hidden_dim, hidden_dim)
-        self.block_3 = ResnetBlockFC(2*hidden_dim, hidden_dim)
-        self.block_4 = ResnetBlockFC(2*hidden_dim, hidden_dim)
+        self.fc_pos = nn.Linear(dim, 2 * hidden_dim)
+        self.block_0 = ResnetBlockFC(2 * hidden_dim, hidden_dim)
+        self.block_1 = ResnetBlockFC(2 * hidden_dim, hidden_dim)
+        self.block_2 = ResnetBlockFC(2 * hidden_dim, hidden_dim)
+        self.block_3 = ResnetBlockFC(2 * hidden_dim, hidden_dim)
+        self.block_4 = ResnetBlockFC(2 * hidden_dim, hidden_dim)
         self.fc_c = nn.Linear(hidden_dim, c_dim)
 
         self.actvn = nn.ReLU()
@@ -111,3 +110,20 @@ class ResnetPointnet(nn.Module):
         c = self.fc_c(self.actvn(net))
 
         return c
+
+
+class AtlasNetV2PointNet(nn.Module):
+    ''' PointNet-based encoder network with ResNet blocks.
+
+    Args:
+        c_dim (int): dimension of latent code c
+        dim (int): input points dimension
+        hidden_dim (int): hidden dimension of the network
+    '''
+    def __init__(self, c_dim=2500, dim=3, hidden_dim=1024):
+        super().__init__()
+        self.pointnet = PointNetfeat(npoint=c_dim, nlatent=hidden_dim)
+
+    def forward(self, x):
+        x = x.transpose(2, 1).contiguous()
+        return self.pointnet(x)

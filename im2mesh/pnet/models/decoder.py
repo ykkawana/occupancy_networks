@@ -8,6 +8,8 @@ sys.path.insert(0, './external.periodic_shapes')
 from periodic_shapes.models import super_shape, super_shape_sampler, periodic_shape_sampler, sphere_sampler
 import time
 
+EPS = 1e-7
+
 
 class PeriodicShapeDecoderSimplest(nn.Module):
     ''' Decoder with CBN class 2.
@@ -45,7 +47,7 @@ class PeriodicShapeDecoderSimplest(nn.Module):
         paramnet_hidden_size=128,
         paramnet_dense=True,
         is_single_paramnet=False,
-        layer_depth=4,
+        layer_depth=0,
         skip_position=3,  # count start from input fc
         is_skip=True,
         shape_sampler_decoder_class='PrimitiveWiseGroupConvDecoder',
@@ -54,12 +56,17 @@ class PeriodicShapeDecoderSimplest(nn.Module):
         no_last_bias=False,
         supershape_freeze_rotation_scale=False,
         get_features_from=[],
-        concat_input_feature_with_pose_feature=False):
+        concat_input_feature_with_pose_feature=False,
+        return_sdf=False,
+        is_radius_reg=False,
+        spherical_angles=False,
+        last_scale=.1):
         super().__init__()
         assert dim in [2, 3]
         self.is_train_periodic_shape_sampler = is_train_periodic_shape_sampler
         self.get_features_from = get_features_from
         self.concat_input_feature_with_pose_feature = concat_input_feature_with_pose_feature
+        self.is_radius_reg = is_radius_reg
 
         self.primitive = super_shape.SuperShapes(
             max_m,
@@ -97,13 +104,16 @@ class PeriodicShapeDecoderSimplest(nn.Module):
             dim=dim,
             factor=shape_sampler_decoder_factor,
             no_encoder=True,
+            last_scale=last_scale,
             disable_learn_pose_but_transition=disable_learn_pose_but_transition,
             is_shape_sampler_sphere=is_shape_sampler_sphere,
             decoder_class=shape_sampler_decoder_class,
             is_feature_angles=is_feature_angles,
             is_feature_coord=is_feature_coord,
             is_feature_radius=is_feature_radius,
-            no_last_bias=no_last_bias)
+            no_last_bias=no_last_bias,
+            spherical_angles=spherical_angles,
+            return_sdf=return_sdf)
         # simple_sampler = super_shape_sampler.SuperShapeSampler(max_m,
         #                                                        n_primitives,
         #                                                        dim=dim)
@@ -126,12 +136,25 @@ class PeriodicShapeDecoderSimplest(nn.Module):
             else:
                 feature = color_feature
 
-            assert feature.shape[-1] == 256 + 128
             output = self.p_sampler(params,
                                     thetas=angles,
                                     coord=coord,
                                     points=feature,
                                     return_surface_mask=True)
+            pcoord, o1, o2, o3 = output
+            if self.is_radius_reg:
+                # B, N, P, dim
+                # pcoord
+
+                # B, N, 1, dim
+                transition = params['transition'].unsqueeze(2)
+                pcentered_coord = pcoord - transition
+                radius = (pcentered_coord**2).sum(-1).clamp(min=EPS).sqrt()
+                output = (pcoord, o1, o2, o3, radius)
+
+            else:
+                output = (pcoord, o1, o2, o3, None)
+
         else:
             output = self.simple_sampler(params,
                                          thetas=angles,

@@ -1,5 +1,7 @@
-inherit_from: configs/img/onet.yaml
+inherit_from: configs/img/onet_original.yaml
 test:
   model_file: https://s3.eu-central-1.amazonaws.com/avg-projects/occupancy_networks/models/onet_img2mesh_3-f786b04a.pt
+training:
+  out_dir:  out/submission/eval/img/onet_pretrained
 generation:
   generation_dir: pretrained

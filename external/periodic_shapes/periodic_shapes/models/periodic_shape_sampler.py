@@ -19,15 +19,16 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
                  act='leaky',
                  decoder_class='PrimitiveWiseGroupConvDecoder',
                  is_shape_sampler_sphere=False,
+                 spherical_angles=False,
                  no_encoder=False,
                  is_feature_angles=True,
                  is_feature_coord=True,
                  is_feature_radius=True,
                  no_last_bias=False,
+                 return_sdf=False,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.clamp = True
-        self.spherical_angles = False
         self.factor = factor
         self.num_points = num_points
         self.num_labels = 1  # Only infer r2 for 3D
@@ -37,6 +38,8 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
         self.act = act
         self.no_encoder = no_encoder
         self.is_shape_sampler_sphere = is_shape_sampler_sphere
+        self.spherical_angles = spherical_angles
+        self.return_sdf = return_sdf
 
         c64 = 64 // self.factor
         self.encoder_dim = c64 * 2
@@ -80,7 +83,7 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
             coord = super_shape_functions.sphere2cartesian(r, thetas_reshaped)
         else:
             coord = super_shape_functions.polar2cartesian(r, thetas_reshaped)
-
+        assert not torch.isnan(coord).any()
         # posed_coord = B, n_primitives, P, dim
         if self.learn_pose:
             posed_coord = self.project_primitive_to_world(
@@ -88,11 +91,20 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
         else:
             posed_coord = coord
 
+        #print('')
+        #print('get pr from points')
         periodic_net_r = self.get_periodic_net_r(thetas.unsqueeze(1), points,
                                                  r[..., -1], posed_coord)
 
         final_r = r.clone()
-        final_r[..., -1] = r[..., -1] + periodic_net_r.squeeze(-1)
+        if self.is_shape_sampler_sphere and self.spherical_angles:
+            #print('mean r1 in points', r[..., 0].mean())
+            final_r[..., 0] = r[..., 0] + periodic_net_r.squeeze(-1)
+            #print('mean final r in points', final_r[..., 0].mean())
+        else:
+            #print('mean r1 in points', r[..., -1].mean())
+            final_r[..., -1] = r[..., -1] + periodic_net_r.squeeze(-1)
+            #print('mean final r in points', final_r[..., -1].mean())
 
         if self.clamp:
             final_r = final_r.clamp(min=EPS)
@@ -125,6 +137,7 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
 
     def get_periodic_net_r(self, thetas, points, radius, coord):
         # B, 1 or N, P, dim - 1
+        #print('mean coord in pr', coord.mean())
         assert len(thetas.shape) == 4, thetas.shape
         assert thetas.shape[-1] == self.dim - 1
         assert points.shape[0] == thetas.shape[0]
@@ -148,6 +161,7 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
         radius = self.decoder(encoded, thetas, radius, coord)
         radius = radius * self.last_scale
 
+        #print('mean from pr ', radius.mean())
         return radius
 
     def get_indicator(self,
@@ -185,16 +199,26 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
         if self.learn_pose:
             posed_coord = self.project_primitive_to_world(posed_coord, params)
 
+        #print('get pr from sgn')
         rp = self.get_periodic_net_r(angles, points, radius, posed_coord)
 
+        #print('mean r1 in sgn', r1.mean())
         numerator = (coord**2).sum(-1)
         if self.is_shape_sampler_sphere:
             r1 = r1 + rp.squeeze(-1)
+            #print('mean final r in sgn', r1.mean())
             if self.clamp:
                 r1 = r1.clamp(min=EPS)
+                nep = numerator.clamp(min=EPS)
             else:
                 r1 = nn.functional.relu(r1) + EPS
-            indicator = 1 - numerator.clamp(min=EPS).sqrt() / r1
+                nep = (numerator + EPS)
+            if self.return_sdf:
+                dist = nep.sqrt() - r1
+                indicator = dist.sign() * dist**2
+            else:
+                indicator = 1 - numerator.clamp(min=EPS).sqrt() / r1
+
         else:
             if is3d:
                 r2 = r2 + rp.squeeze(-1)
@@ -211,18 +235,28 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
             if self.clamp:
                 denominator = ((r1**2) * (r2**2) * (phi.cos()**2) + (r2**2) *
                                (phi.sin()**2)).clamp(min=EPS)
-                indicator = 1. - (numerator /
-                                  denominator).clamp(min=EPS).sqrt()
             else:
                 denominator = ((r1**2) * (r2**2) * (phi.cos()**2) + (r2**2) *
                                (phi.sin()**2)) + EPS
-                indicator = 1. - (numerator / denominator + EPS).sqrt()
+            if self.return_sdf:
+                if self.clamp:
+                    nep = numerator.clamp(min=EPS)
+                else:
+                    nep = (numerator + EPS)
+                dist = nep.sqrt() - denominator.sqrt()
+                indicator = (dist).sign() * dist**2
+            else:
+                if self.clamp:
+                    indicator = 1. - (numerator /
+                                      denominator).clamp(min=EPS).sqrt()
+                else:
+                    indicator = 1. - (numerator / denominator + EPS).sqrt()
 
         return indicator
 
     def get_sgn(self, coord, params, *args, **kwargs):
         if self.is_shape_sampler_sphere and self.spherical_angles:
-            r, angles = super_shape_functions.cartesian2sphere(coord)
+            r, angles = self.cartesian2sphere(coord, params, *args, **kwargs)
             r1 = r[..., 0]
             r2 = r[..., 1]
             theta = angles[..., 0]

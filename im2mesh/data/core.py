@@ -3,8 +3,7 @@ import logging
 from torch.utils import data
 import numpy as np
 import yaml
-
-
+import traceback
 logger = logging.getLogger(__name__)
 
 
@@ -12,7 +11,6 @@ logger = logging.getLogger(__name__)
 class Field(object):
     ''' Data fields class.
     '''
-
     def load(self, data_path, idx, category):
         ''' Loads a data point.
 
@@ -35,9 +33,13 @@ class Field(object):
 class Shapes3dDataset(data.Dataset):
     ''' 3D Shapes dataset class.
     '''
-
-    def __init__(self, dataset_folder, fields, split=None,
-                 categories=None, no_except=True, transform=None):
+    def __init__(self,
+                 dataset_folder,
+                 fields,
+                 split=None,
+                 categories=None,
+                 no_except=True,
+                 transform=None):
         ''' Initialization of the the 3D shape dataset.
 
         Args:
@@ -57,8 +59,10 @@ class Shapes3dDataset(data.Dataset):
         # If categories is None, use all subfolders
         if categories is None:
             categories = os.listdir(dataset_folder)
-            categories = [c for c in categories
-                          if os.path.isdir(os.path.join(dataset_folder, c))]
+            categories = [
+                c for c in categories
+                if os.path.isdir(os.path.join(dataset_folder, c))
+            ]
 
         # Read metadata file
         metadata_file = os.path.join(dataset_folder, 'metadata.yaml')
@@ -67,10 +71,8 @@ class Shapes3dDataset(data.Dataset):
             with open(metadata_file, 'r') as f:
                 self.metadata = yaml.load(f)
         else:
-            self.metadata = {
-                c: {'id': c, 'name': 'n/a'} for c in categories
-            } 
-        
+            self.metadata = {c: {'id': c, 'name': 'n/a'} for c in categories}
+
         # Set index
         for c_idx, c in enumerate(categories):
             self.metadata[c]['idx'] = c_idx
@@ -85,11 +87,8 @@ class Shapes3dDataset(data.Dataset):
             split_file = os.path.join(subpath, split + '.lst')
             with open(split_file, 'r') as f:
                 models_c = f.read().split('\n')
-            
-            self.models += [
-                {'category': c, 'model': m}
-                for m in models_c
-            ]
+
+            self.models += [{'category': c, 'model': m} for m in models_c]
 
     def __len__(self):
         ''' Returns the length of the dataset.
@@ -113,11 +112,11 @@ class Shapes3dDataset(data.Dataset):
             try:
                 field_data = field.load(model_path, idx, c_idx)
             except Exception:
+                traceback.print_exc()
                 if self.no_except:
                     logger.warn(
-                        'Error occured when loading field %s of model %s'
-                        % (field_name, model)
-                    )
+                        'Error occured when loading field %s of model %s' %
+                        (field_name, model))
                     return None
                 else:
                     raise
@@ -149,8 +148,8 @@ class Shapes3dDataset(data.Dataset):
         files = os.listdir(model_path)
         for field_name, field in self.fields.items():
             if not field.check_complete(files):
-                logger.warn('Field "%s" is incomplete: %s'
-                            % (field_name, model_path))
+                logger.warn('Field "%s" is incomplete: %s' %
+                            (field_name, model_path))
                 return False
 
         return True

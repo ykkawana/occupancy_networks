@@ -112,7 +112,7 @@ class CheckpointIO(object):
                         new_pretrained_dict.keys())
                     print('ignored parameters')
                     for key in diff:
-                        print(key)
+                        print(key, pretrained_dict[key].shape)
                     pretrained_dict_new_param = {
                         key: val
                         for key, val in model_dict.items()
@@ -120,7 +120,7 @@ class CheckpointIO(object):
                     }
                     print('new parameters')
                     for key in pretrained_dict_new_param:
-                        print(key)
+                        print(key, pretrained_dict_new_param[key].shape)
                     new_pretrained_dict.update(pretrained_dict_new_param)
                     v.load_state_dict(new_pretrained_dict)
                 else:
