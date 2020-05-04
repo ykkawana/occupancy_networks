@@ -26,12 +26,14 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
                  is_feature_radius=True,
                  no_last_bias=False,
                  return_sdf=False,
+                 is_infer_r1r2=False,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.clamp = True
         self.factor = factor
         self.num_points = num_points
-        self.num_labels = 1  # Only infer r2 for 3D
+        self.num_labels = (1 if not is_infer_r1r2 or self.dim == 2 else 2
+                           )  # Only infer r2 for 3D
         self.theta_dim = 2 if self.dim == 2 else 4
         self.last_scale = last_scale
 
@@ -40,6 +42,9 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
         self.is_shape_sampler_sphere = is_shape_sampler_sphere
         self.spherical_angles = spherical_angles
         self.return_sdf = return_sdf
+        self.is_infer_r1r2 = is_infer_r1r2
+        if self.is_infer_r1r2:
+            assert not self.is_shape_sampler_sphere and not self.spherical_angles
 
         c64 = 64 // self.factor
         self.encoder_dim = c64 * 2
@@ -101,6 +106,9 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
             #print('mean r1 in points', r[..., 0].mean())
             final_r[..., 0] = r[..., 0] + periodic_net_r.squeeze(-1)
             #print('mean final r in points', final_r[..., 0].mean())
+
+        elif self.is_infer_r1r2:
+            final_r = r + periodic_net_r
         else:
             #print('mean r1 in points', r[..., -1].mean())
             final_r[..., -1] = r[..., -1] + periodic_net_r.squeeze(-1)
@@ -110,11 +118,11 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
             final_r = final_r.clamp(min=EPS)
         else:
             final_r = torch.relu(final_r) + EPS
-        print('r in ss stats',
-              final_r.mean().item(),
-              final_r.max().item(),
-              final_r.min().item(),
-              final_r.std().item())
+        #print('r in ss stats',
+        #      final_r.mean().item(),
+        #      final_r.max().item(),
+        #      final_r.min().item(),
+        #      final_r.std().item())
 
         # B, n_primitives, P, dim
         if self.is_shape_sampler_sphere and self.spherical_angles:
@@ -221,11 +229,21 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
 
         else:
             if is3d:
-                r2 = r2 + rp.squeeze(-1)
-                if self.clamp:
-                    r2 = r2.clamp(min=EPS)
+                if self.is_infer_r1r2:
+                    r1 = r1 + rp[..., 0]
+                    r2 = r2 + rp[..., -1]
+                    if self.clamp:
+                        r1 = r1.clamp(min=EPS)
+                        r2 = r2.clamp(min=EPS)
+                    else:
+                        r1 = nn.functional.relu(r1) + EPS
+                        r2 = nn.functional.relu(r2) + EPS
                 else:
-                    r2 = nn.functional.relu(r2) + EPS
+                    r2 = r2 + rp.squeeze(-1)
+                    if self.clamp:
+                        r2 = r2.clamp(min=EPS)
+                    else:
+                        r2 = nn.functional.relu(r2) + EPS
             else:
                 r1 = r1 + rp.squeeze(-1)
                 if self.clamp:

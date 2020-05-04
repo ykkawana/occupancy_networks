@@ -14,6 +14,7 @@ class BaseShapeSampler(nn.Module):
                  learn_pose=True,
                  linear_scaling=True,
                  disable_learn_pose_but_transition=False,
+                 extract_surface_point_by_max=False,
                  dim=2):
         """Intitialize SuperShapeSampler.
 
@@ -28,6 +29,7 @@ class BaseShapeSampler(nn.Module):
         self.learn_pose = learn_pose
         self.linear_scaling = linear_scaling
         self.disable_learn_pose_but_transition = disable_learn_pose_but_transition
+        self.extract_surface_point_by_max = extract_surface_point_by_max
 
         self.dim = dim
         if not self.dim in [2, 3]:
@@ -276,9 +278,14 @@ class BaseShapeSampler(nn.Module):
         P = NP // N
         output_sgn = output_sgn_BxNxNP.view(B, self.n_primitives,
                                             self.n_primitives, P)
-        sgn_p_BxPsN = nn.functional.relu(output_sgn).sum(1).view(
-            B, self.n_primitives, P)
-        surface_mask = (sgn_p_BxPsN <= 1e-1)
+        if self.extract_surface_point_by_max:
+            sgn_p_BxPsN = torch.relu(output_sgn.max(1)[0]).view(
+                B, self.n_primitives, P)
+            surface_mask = (sgn_p_BxPsN <= 1e-4)
+        else:
+            sgn_p_BxPsN = nn.functional.relu(output_sgn).sum(1).view(
+                B, self.n_primitives, P)
+            surface_mask = (sgn_p_BxPsN <= 1e-1)
         return surface_mask
 
     def extract_surface_point_std(self, super_shape_point, primitive_params,

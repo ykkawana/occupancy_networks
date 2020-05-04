@@ -327,15 +327,27 @@ class Trainer(BaseTrainer):
                     pointcloud.shape[:2], device=occ.device, dtype=occ.dtype)
             ],
                             axis=1)
-
+        """
         c = self.model.encode_inputs(inputs)
         q_z = self.model.infer_z(points, occ, c, **kwargs)
         z = q_z.rsample()
 
         # General points
 
+        output = self.model.decode(scaled_coord,
+                                          z,
+                                          c,
+                                          angles=angles,
+                                          **kwargs)
+
+        """
         scaled_coord = points * self.pnet_point_scale
-        output = self.model.decode(scaled_coord, z, c, angles=angles, **kwargs)
+        output = self.model(scaled_coord,
+                            inputs,
+                            sample=True,
+                            angles=angles,
+                            **kwargs)
+
         super_shape_point, surface_mask, sgn, sgn_BxNxNP, radius = output
 
         # losses
@@ -396,11 +408,19 @@ class Trainer(BaseTrainer):
             apply_surface_mask_before_chamfer=self.is_strict_chamfer)
 
         if self.is_normal_loss:
+            """
             output = self.model.decode(scaled_coord,
                                        z,
                                        c,
                                        angles=normal_angles,
                                        **kwargs)
+            """
+            output = self.model(scaled_coord,
+                                inputs,
+                                sample=True,
+                                angles=normal_angles,
+                                **kwargs)
+
             normal_vertices, normal_mask, _, _, _ = output
 
             B, N, P, D = normal_vertices.shape

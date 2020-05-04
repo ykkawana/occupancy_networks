@@ -1,0 +1,42 @@
+method: bspnet
+data:
+  path: data/ShapeNet
+  bspnet:
+    path: data/ShapeNetBSPNet
+    pointcloud_file: pointcloud.ply
+    extension: 'npz' # for bspnet image
+    img_folder: bsp_img_choy2016
+  train_split: train # Overfit to train data, see if training is working
+  val_split: train
+  test_split: test 
+  #classes: ['02691156'] # plane
+  classes: ['04379243'] # table 
+  #classes: ['03636649'] # lampe
+  img_folder: img_choy2016
+  debug:
+    sample_n: 50
+model:
+  decoder: PretrainedBSPNetDecoder
+  encoder: PretrainedBSPNetEncoder
+  decoder_kwargs:
+    n_primitives: 256
+    #n_primitives: 30 
+training:
+  out_dir:  out/img/debug_atlasnetv2
+  batch_size: 20
+  val_batch_size: 2
+test:
+  #model_file: /home/mil/kawana/workspace/occupancy_networks/external/bspnet/checkpoint/all_vox256_img_svr_128/BSP_SVR.model-1000.pth
+  model_file: /home/mil/kawana/workspace/occupancy_networks/external/bspnet/out/checkpoint_256_2/all_vox256_img_svr_128/BSP_SVR.model-1000.pth
+  #model_file: /home/mil/kawana/workspace/occupancy_networks/external/bspnet/out/checkpoint_30/all_vox256_img_svr_128/BSP_SVR.model-1000.pth
+  threshold: 0.5
+  eval_mesh: true
+  eval_pointcloud: false
+generation:
+  batch_size: 100000
+  refine: false
+  n_x: 128
+  n_z: 1
+  resolution_0: 32 
+  upsampling_steps: 2
+

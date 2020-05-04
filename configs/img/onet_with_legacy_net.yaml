@@ -1,0 +1,10 @@
+inherit_from: configs/img/onet_original.yaml
+data:
+  img_augment: false
+model:
+  decoder_kwargs:
+    legacy: true
+training:
+  out_dir:  out/submission/eval/img/onet_with_legacy_net
+generation:
+  generation_dir: generation

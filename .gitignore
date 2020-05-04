@@ -22,7 +22,14 @@ build
 
 *.jpg
 *.png
+*.bmp
 *.pkl
 *.csv
 *.obj
 *.off
+*.ply
+*.npz
+*.mtl
+wandb/
+*.zip
+*.tar.gz

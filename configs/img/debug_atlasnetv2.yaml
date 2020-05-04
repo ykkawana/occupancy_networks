@@ -16,14 +16,15 @@ model:
   encoder_latent: null
   decoder: atlasnetv2decoder 
   encoder: resnet18
-  c_dim: 1024
+  c_dim: 256
   z_dim: 0
   decoder_kwargs:
     npatch: 10
     patchDim: 2
     patchDeformDim: 3
+    hidden_size: 256
 training:
-  out_dir:  out/img/debug_atlasnetv2-2
+  out_dir:  out/img/debug_atlasnetv2
   batch_size: 20
   val_batch_size: 2
   model_selection_metric: cd1
@@ -36,6 +37,8 @@ training:
   learning_rage_decay_at:
     - 250
     - 300
+trainer:
+  point_scale: 2
 test:
   threshold: 0.5
   eval_mesh: true

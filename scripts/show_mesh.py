@@ -1,0 +1,11 @@
+# %%
+import trimesh
+
+path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_target_n_4096_no_overlap_reg_normal_transition_feature_concat_color_feature_20200425_154337/generation_explicit_20200425_154727/vis/03636649_lamp/00_mesh.off'
+path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_target_n_4096_no_overlap_reg_normal_transition_feature_concat_color_feature_20200425_154337/generation_explicit_20200425_154727/meshes/03636649/d1b15263933da857784a45ea6efa1d77.off'
+path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_target_n_4096_no_overlap_reg_normal_transition_feature_concat_color_feature_20200425_154337/generation_explicit_20200425_154727/meshes/02691156/d1a8e79eebf4a0b1579c3d4943e463ef.off'
+path = '/home/mil/kawana/workspace/occupancy_networks/external/bspnet/samples/bsp_svr_out/0_bsp.obj'
+mesh = trimesh.load(path)
+mesh.show()
+
+# %%

@@ -79,6 +79,5 @@ class PrimitiveWiseLinear(nn.Module):
         """
 
         B, N, D, P = input_data.shape
-        return self.main(input_data.view(B, N * D,
-                                         P)).view(B, N, self.output_channels,
-                                                  P)
+        out = self.main(input_data.view(B, N * D, P))
+        return out.view(B, N, self.output_channels, P)

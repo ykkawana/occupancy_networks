@@ -118,7 +118,6 @@ class ShapeDecoderCBatchNorm(nn.Module):
                           P).transpose(2, 3).contiguous()
 
         # B, n_primitives, P, self.label_num = 1
-        print('radius', radius.mean().item())
         return radius
 
 

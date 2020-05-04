@@ -8,6 +8,7 @@ from im2mesh.utils import libmcubes
 from im2mesh.common import make_3d_grid
 from im2mesh.utils.libsimplify import simplify_mesh
 from im2mesh.utils.libmise import MISE
+from periodic_shapes.models import model_utils
 import time
 
 
@@ -30,13 +31,22 @@ class Generator3D(object):
         simplify_nfaces (int): number of faces the mesh should be simplified to
         preprocessor (nn.Module): preprocessor for inputs
     '''
-
-    def __init__(self, model, points_batch_size=100000,
-                 threshold=0.5, refinement_step=0, device=None,
-                 resolution0=16, upsampling_steps=3,
-                 with_normals=False, padding=0.1, sample=False,
+    def __init__(self,
+                 model,
+                 points_batch_size=100000,
+                 threshold=0.5,
+                 refinement_step=0,
+                 device=None,
+                 resolution0=16,
+                 upsampling_steps=3,
+                 with_normals=False,
+                 padding=0.1,
+                 sample=False,
                  simplify_nfaces=None,
-                 preprocessor=None):
+                 preprocessor=None,
+                 point_scale=1,
+                 debugged=False,
+                 **kwargs):
         self.model = model.to(device)
         self.points_batch_size = points_batch_size
         self.refinement_step = refinement_step
@@ -49,6 +59,8 @@ class Generator3D(object):
         self.sample = sample
         self.simplify_nfaces = simplify_nfaces
         self.preprocessor = preprocessor
+        self.point_scale = point_scale
+        self.debugged = debugged
 
     def generate_mesh(self, data, return_stats=True):
         ''' Generates the output mesh.
@@ -61,7 +73,8 @@ class Generator3D(object):
         device = self.device
         stats_dict = {}
 
-        inputs = data.get('inputs', torch.empty(1, 0)).to(device)
+        inputs = data.get('inputs', torch.empty(
+            1, 0)).to(device) * (1 if self.debugged else self.point_scale)
         kwargs = {}
 
         # Preprocess if requires
@@ -77,15 +90,24 @@ class Generator3D(object):
             c = self.model.encode_inputs(inputs)
         stats_dict['time (encode inputs)'] = time.time() - t0
 
-        z = self.model.get_z_from_prior((1,), sample=self.sample).to(device)
-        mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
+        z = self.model.get_z_from_prior((1, ), sample=self.sample).to(device)
+        mesh = self.generate_from_latent(z,
+                                         c,
+                                         stats_dict=stats_dict,
+                                         data=data,
+                                         **kwargs)
 
         if return_stats:
             return mesh, stats_dict
         else:
             return mesh
 
-    def generate_from_latent(self, z, c=None, stats_dict={}, **kwargs):
+    def generate_from_latent(self,
+                             z,
+                             c=None,
+                             stats_dict={},
+                             data=None,
+                             **kwargs):
         ''' Generates mesh from latent.
 
         Args:
@@ -93,48 +115,31 @@ class Generator3D(object):
             c (tensor): latent conditioned code c
             stats_dict (dict): stats dictionary
         '''
-        threshold = np.log(self.threshold) - np.log(1. - self.threshold)
+        assert data is not None
 
+        faces = data.get('patch.mesh_faces').to(self.device)
+        vertices = data.get('patch.mesh_vertices').to(self.device)
+        patch = data.get('patch').to(self.device)
         t0 = time.time()
-        # Compute bounding box size
-        box_size = 1 + self.padding
-
-        # Shortcut
-        if self.upsampling_steps == 0:
-            nx = self.resolution0
-            pointsf = box_size * make_3d_grid(
-                (-0.5,)*3, (0.5,)*3, (nx,)*3
-            )
-            values = self.eval_points(pointsf, z, c, **kwargs).cpu().numpy()
-            value_grid = values.reshape(nx, nx, nx)
-        else:
-            mesh_extractor = MISE(
-                self.resolution0, self.upsampling_steps, threshold)
-
-            points = mesh_extractor.query()
-
-            while points.shape[0] != 0:
-                # Query points
-                pointsf = torch.FloatTensor(points).to(self.device)
-                # Normalize to bounding box
-                pointsf = pointsf / mesh_extractor.resolution
-                pointsf = box_size * (pointsf - 0.5)
-                # Evaluate model and update
-                values = self.eval_points(
-                    pointsf, z, c, **kwargs).cpu().numpy()
-                values = values.astype(np.float64)
-                mesh_extractor.update(points, values)
-                points = mesh_extractor.query()
-
-            value_grid = mesh_extractor.to_dense()
-
-        # Extract mesh
+        predicted_vertices = self.model.decode(
+            None, z, c, grid=patch, **kwargs) / self.point_scale
         stats_dict['time (eval points)'] = time.time() - t0
 
-        mesh = self.extract_mesh(value_grid, z, c, stats_dict=stats_dict)
+        t0 = time.time()
+        B, N, P, D = predicted_vertices.shape
+        faces_all = torch.cat([(faces + idx * P) for idx in range(N)], axis=1)
+        assert B == 1
+        mem_t = time.time()
+        npverts = predicted_vertices.view(N * P, D).to('cpu').detach().numpy()
+        npfaces = faces_all.view(-1, 3).to('cpu').detach().numpy()
+        skip_t = time.time() - mem_t
+
+        mesh = trimesh.Trimesh(npverts, npfaces, process=False)
+        stats_dict['time (copy to trimesh)'] = time.time() - t0 - skip_t
+
         return mesh
 
-    def eval_points(self, p, z, c=None, **kwargs):
+    def eval_points(self, p, z, c=None, data=None, **kwargs):
         ''' Evaluates the occupancy values for the points.
 
         Args:
@@ -142,13 +147,26 @@ class Generator3D(object):
             z (tensor): latent code z
             c (tensor): latent conditioned code c
         '''
+        assert data is not None
         p_split = torch.split(p, self.points_batch_size)
+
+        angles = data.get('angles').to(self.device)
         occ_hats = []
 
         for pi in p_split:
             pi = pi.unsqueeze(0).to(self.device)
+            an = angles.to(self.device)
             with torch.no_grad():
-                occ_hat = self.model.decode(pi, z, c, **kwargs).logits
+                #_, _, sgn, _ = self.model.decode(pi, z, c, **kwargs).logits
+                _, _, sgn, _, _ = self.model.decode(pi * self.pnet_point_scale,
+                                                    z,
+                                                    c,
+                                                    angles=an,
+                                                    **kwargs)
+
+                occ_hat = (
+                    model_utils.convert_tsd_range_to_zero_to_one(sgn).sum(1) >
+                    self.threshold).float()
 
             occ_hats.append(occ_hat.squeeze(0).detach().cpu())
 
@@ -168,20 +186,20 @@ class Generator3D(object):
         # Some short hands
         n_x, n_y, n_z = occ_hat.shape
         box_size = 1 + self.padding
-        threshold = np.log(self.threshold) - np.log(1. - self.threshold)
+        threshold = 0.
+        #threshold = np.log(self.threshold) - np.log(1. - self.threshold)
         # Make sure that mesh is watertight
         t0 = time.time()
-        occ_hat_padded = np.pad(
-            occ_hat, 1, 'constant', constant_values=-1e6)
-        vertices, triangles = libmcubes.marching_cubes(
-            occ_hat_padded, threshold)
+        occ_hat_padded = np.pad(occ_hat, 1, 'constant', constant_values=-1e6)
+        vertices, triangles = libmcubes.marching_cubes(occ_hat_padded,
+                                                       threshold)
         stats_dict['time (marching cubes)'] = time.time() - t0
         # Strange behaviour in libmcubes: vertices are shifted by 0.5
         vertices -= 0.5
         # Undo padding
         vertices -= 1
         # Normalize to bounding box
-        vertices /= np.array([n_x-1, n_y-1, n_z-1])
+        vertices /= np.array([n_x - 1, n_y - 1, n_z - 1])
         vertices = box_size * (vertices - 0.5)
 
         # mesh_pymesh = pymesh.form_mesh(vertices, triangles)
@@ -197,7 +215,8 @@ class Generator3D(object):
             normals = None
 
         # Create mesh
-        mesh = trimesh.Trimesh(vertices, triangles,
+        mesh = trimesh.Trimesh(vertices,
+                               triangles,
                                vertex_normals=normals,
                                process=False)
 
@@ -261,7 +280,7 @@ class Generator3D(object):
 
         # Some shorthands
         n_x, n_y, n_z = occ_hat.shape
-        assert(n_x == n_y == n_z)
+        assert (n_x == n_y == n_z)
         # threshold = np.log(self.threshold) - np.log(1. - self.threshold)
         threshold = self.threshold
 
@@ -290,10 +309,9 @@ class Generator3D(object):
             face_normal = face_normal / \
                 (face_normal.norm(dim=1, keepdim=True) + 1e-10)
             face_value = torch.sigmoid(
-                self.model.decode(face_point.unsqueeze(0), z, c).logits
-            )
-            normal_target = -autograd.grad(
-                [face_value.sum()], [face_point], create_graph=True)[0]
+                self.model.decode(face_point.unsqueeze(0), z, c).logits)
+            normal_target = -autograd.grad([face_value.sum()], [face_point],
+                                           create_graph=True)[0]
 
             normal_target = \
                 normal_target / \

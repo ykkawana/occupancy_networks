@@ -31,6 +31,9 @@ class Trainer(BaseTrainer):
                  input_type='img',
                  vis_dir=None,
                  threshold=0.5,
+                 point_scale=1,
+                 is_pykeops_loss=True,
+                 debugged=False,
                  eval_sample=False):
         self.model = model
         self.optimizer = optimizer
@@ -39,6 +42,9 @@ class Trainer(BaseTrainer):
         self.vis_dir = vis_dir
         self.threshold = threshold
         self.eval_sample = eval_sample
+        self.point_scale = point_scale
+        self.is_pykeops_loss = is_pykeops_loss
+        self.debugged = debugged
 
         self.distChamferL2 = dist_chamfer.chamferDist()
 
@@ -67,11 +73,12 @@ class Trainer(BaseTrainer):
         self.model.eval()
 
         device = self.device
-        pointcloud = data.get('pointcloud').to(device)
+        pointcloud = data.get('pointcloud').to(device) * self.point_scale
         patch = data.get('patch').to(device)
-        inputs = data.get('inputs', torch.empty(pointcloud.size(0),
-                                                0)).to(device)
-
+        inputs = data.get('inputs', torch.empty(
+            pointcloud.size(0),
+            0)).to(device) * (1 if self.debugged else self.point_scale)
+        assert self.debugged
         feature = self.model.encode_inputs(inputs)
 
         eval_dict = {}
@@ -99,10 +106,11 @@ class Trainer(BaseTrainer):
         '''
         device = self.device
 
-        pointcloud = data.get('pointcloud').to(device)
+        pointcloud = data.get('pointcloud').to(device) * self.point_scale
         patch = data.get('patch').to(device)
-        inputs = data.get('inputs', torch.empty(pointcloud.size(0),
-                                                0)).to(device)
+        inputs = data.get('inputs', torch.empty(
+            pointcloud.size(0),
+            0)).to(device) * (1 if self.debugged else self.point_scale)
 
         feature = self.model.encode_inputs(inputs)
 
@@ -122,17 +130,17 @@ class Trainer(BaseTrainer):
         for i in trange(B):
             if not inputs.ndim == 1:  # no input image
                 input_img_path = os.path.join(self.vis_dir, '%03d_in.png' % i)
-                plot = vis.visualize_data(inputs[i].cpu(),
+                plot = vis.visualize_data(inputs[i].cpu() / self.point_scale,
                                           self.input_type,
                                           input_img_path,
                                           return_plot=True)
                 input_images.append(
                     wandb.Image(plot, caption='input image {}'.format(i)))
-            plot = vis.visualize_pointcloud(coords[i].cpu().view(N * P, dims),
-                                            normals=None,
-                                            out_file=os.path.join(
-                                                self.vis_dir, '%03d.png' % i),
-                                            return_plot=True)
+            plot = vis.visualize_pointcloud(
+                coords[i].cpu().view(N * P, dims) / self.point_scale,
+                normals=None,
+                out_file=os.path.join(self.vis_dir, '%03d.png' % i),
+                return_plot=True)
             voxels_images.append(
                 wandb.Image(plot, caption='voxel {}'.format(i)))
         if not inputs.ndim == 1:  # no input image
@@ -146,11 +154,12 @@ class Trainer(BaseTrainer):
             data (dict): data dictionary
         '''
         device = self.device
-        pointcloud = data.get('pointcloud').to(device)
+        pointcloud = data.get('pointcloud').to(device) * self.point_scale
         patch = data.get('patch').to(device)
-        inputs = data.get('inputs', torch.empty(pointcloud.size(0),
-                                                0)).to(device)
-
+        inputs = data.get('inputs', torch.empty(
+            pointcloud.size(0),
+            0)).to(device) * (1 if self.debugged else self.point_scale)
+        assert self.debugged
         kwargs = {}
 
         feature = self.model.encode_inputs(inputs)
@@ -162,11 +171,14 @@ class Trainer(BaseTrainer):
                                    grid=patch,
                                    **kwargs)
         B, N, P, dims = coords.shape
-        """
-        dist1, dist2 = self.distChamferL2(coords.view(B, N * P, dims), pointcloud)
-        loss = torch.mean(dist1) + torch.mean(dist2)
-        """
 
-        loss = atv2_utils.chamfer_loss(coords.view(B, N * P, dims), pointcloud)
+        if self.is_pykeops_loss:
+            loss = atv2_utils.chamfer_loss(coords.view(B, N * P, dims),
+                                           pointcloud)
+        else:
+            dist1, dist2 = self.distChamferL2(coords.view(B, N * P, dims),
+                                              pointcloud)
+            loss = torch.mean(dist1) + torch.mean(dist2)
+
         losses = {'total_loss': loss}
         return losses

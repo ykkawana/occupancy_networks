@@ -10,6 +10,10 @@ from im2mesh import config, data
 from im2mesh.eval import MeshEvaluator
 from im2mesh.utils.io import load_pointcloud
 import numpy as np
+from datetime import datetime
+import yaml
+import eval_utils
+
 parser = argparse.ArgumentParser(description='Evaluate mesh algorithms.')
 parser.add_argument('config', type=str, help='Path to config file.')
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
@@ -17,8 +21,17 @@ parser.add_argument('--eval_input',
                     action='store_true',
                     help='Evaluate inputs instead.')
 
-args = parser.parse_args()
+parser.add_argument('--unique_name',
+                    default='',
+                    type=str,
+                    help='String name for generation.')
+args, unknown_args = parser.parse_known_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
+eval_utils.update_dict_with_options(cfg, unknown_args)
+
+if cfg['test']['is_normalize_by_side_length']:
+    cfg['test']['fscore_thresholds'] = [0.005, 0.01, 0.02, 0.1, 0.2]
+
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
 
@@ -26,22 +39,27 @@ is_eval_explicit_mesh = cfg['test'].get('is_eval_explicit_mesh', False)
 # Shorthands
 #out_dir = cfg['training']['out_dir']
 out_dir = os.path.dirname(args.config)
-generation_dir = os.path.join(out_dir, cfg['generation']['generation_dir'])
+generation_dir = os.path.dirname(args.config)
+date_str = datetime.now().strftime(('%Y%m%d_%H%M%S'))
+assert generation_dir.endswith(cfg['generation']['generation_dir'])
 if not args.eval_input:
     out_file = os.path.join(
-        generation_dir, 'eval_fscore_from_meshes_full{}.pkl'.format(
-            '_explicit' if is_eval_explicit_mesh else ''))
+        generation_dir, 'eval_fscore_from_meshes_full_{}_{}_{}.pkl'.format(
+            args.unique_name, '_explicit' if is_eval_explicit_mesh else '',
+            date_str))
     out_file_class = os.path.join(
-        generation_dir, 'eval_fscore_from_meshes{}.csv'.format(
-            '_explicit' if is_eval_explicit_mesh else ''))
+        generation_dir, 'eval_fscore_from_meshes_{}_{}_{}.csv'.format(
+            args.unique_name, '_explicit' if is_eval_explicit_mesh else '',
+            date_str))
 else:
     out_file = os.path.join(
-        generation_dir, 'eval_fscore_from_input_full{}.pkl'.format(
-            '_explicit' if is_eval_explicit_mesh else ''))
+        generation_dir, 'eval_fscore_from_input_full_{}_{}_{}.pkl'.format(
+            args.unique_name, '_explicit' if is_eval_explicit_mesh else '',
+            date_str))
     out_file_class = os.path.join(
-        generation_dir, 'eval_fscore_from_meshes_input{}.csv'.format(
-            '_explicit' if is_eval_explicit_mesh else ''))
-
+        generation_dir, 'eval_fscore_from_meshes_input_{}_{}_{}.csv'.format(
+            args.unique_name, '_explicit' if is_eval_explicit_mesh else '',
+            date_str))
 # Dataset
 points_field = data.PointsField(
     cfg['data']['points_iou_file'],
@@ -66,8 +84,19 @@ if 'debug' in cfg['data']:
     dataset = torch_data.Subset(dataset,
                                 range(cfg['data']['debug']['sample_n']))
 
+yaml.dump(
+    cfg,
+    open(
+        os.path.join(
+            generation_dir,
+            'fscore_config_{}_{}.yaml'.format(args.unique_name, date_str)),
+        'w'))
+
 # Evaluator
-evaluator = MeshEvaluator(n_points=100000)
+evaluator = MeshEvaluator(
+    n_points=cfg['test']['n_points'],
+    is_sample_from_surface=cfg['test']['is_sample_from_surface'],
+    is_normalize_by_side_length=cfg['test']['is_normalize_by_side_length'])
 
 # Loader
 test_loader = torch.utils.data.DataLoader(dataset,
@@ -129,30 +158,66 @@ for it, data in enumerate(tqdm(test_loader)):
 
     # Evaluate mesh
     if cfg['test']['eval_fscore']:
-        mesh_file = os.path.join(mesh_dir, '%s.off' % modelname)
+        vertex_visibility = None
+        if cfg['method'] == 'pnet':
+            mesh_file = os.path.join(mesh_dir, '%s.off' % modelname)
 
-        if is_eval_explicit_mesh:
-            visbility_file = os.path.join(
-                mesh_dir, '%s_vertex_visbility.npz' % modelname)
-        if os.path.exists(mesh_file):
-            mesh = trimesh.load(mesh_file, process=False)
-            if is_eval_explicit_mesh:
-                vertex_visibility = np.load(
-                    visbility_file)['vertex_visibility']
+            if os.path.exists(mesh_file):
+                mesh = trimesh.load(mesh_file, process=False)
             else:
-                vertex_visibility = None
+                print('Warning: mesh file does not exist: %s' % mesh_file)
+                continue
+            if is_eval_explicit_mesh:
+                visbility_file = os.path.join(
+                    mesh_dir, '%s_vertex_visbility.npz' % modelname)
+                if os.path.exists(visbility_file):
+                    vertex_visibility = np.load(
+                        visbility_file)['vertex_visibility']
+                else:
+                    print('Warning: vibility file does not exist: %s' %
+                          visbility_file)
+                    continue
+        elif cfg['method'] == 'bspnet':
+            vertex_file = os.path.join(mesh_dir,
+                                       '%s_vertex_attributes.npz' % modelname)
+            is_eval_explicit_mesh = True
+            if os.path.exists(vertex_file):
+                try:
+                    vertex_attributes = np.load(vertex_file)
+                    mesh = trimesh.Trimesh(vertex_attributes['vertices'])
+                except:
+                    print('Error in bspnet loading vertex')
+                    continue
+                vertex_visibility = vertex_attributes['vertex_visibility']
+            else:
+                print('Warning: vertex file does not exist: %s' % vertex_file)
+                continue
+        elif cfg['method'] == 'atlasnetv2':
+            mesh_file = os.path.join(mesh_dir, '%s.off' % modelname)
 
-            eval_dict_mesh = evaluator.eval_fscore_from_mesh(
-                mesh,
-                pointcloud_tgt,
-                cfg['test']['fscore_thresholds'],
-                is_eval_explicit_mesh=is_eval_explicit_mesh,
-                vertex_visibility=vertex_visibility)
-            if eval_dict_mesh is not None:
-                for k, v in eval_dict_mesh.items():
-                    eval_dict[k + ' (mesh)'] = v
+            if os.path.exists(mesh_file):
+                mesh = trimesh.load(mesh_file, process=False)
+            else:
+                print('Warning: mesh file does not exist: %s' % mesh_file)
+                continue
         else:
-            print('Warning: mesh does not exist: %s' % mesh_file)
+            mesh_file = os.path.join(mesh_dir, '%s.off' % modelname)
+
+            if os.path.exists(mesh_file):
+                mesh = trimesh.load(mesh_file, process=False)
+            else:
+                print('Warning: mesh file does not exist: %s' % mesh_file)
+                continue
+
+        eval_dict_mesh = evaluator.eval_fscore_from_mesh(
+            mesh,
+            pointcloud_tgt,
+            cfg['test']['fscore_thresholds'],
+            is_eval_explicit_mesh=is_eval_explicit_mesh,
+            vertex_visibility=vertex_visibility)
+        if eval_dict_mesh is not None:
+            for k, v in eval_dict_mesh.items():
+                eval_dict[k + ' (mesh)'] = v
 
 # Create pandas dataframe and save
 eval_df = pd.DataFrame(eval_dicts)

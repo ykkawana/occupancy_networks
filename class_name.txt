@@ -1,0 +1,14 @@
+total 52
+drwxr-xr-x 2 kawana member 4096 Apr 13 06:10 02691156_airplane
+drwxr-xr-x 2 kawana member 4096 Apr 13 17:26 02828884_bench
+drwxr-xr-x 2 kawana member 4096 Apr 13 11:42 02933112_cabinet
+drwxr-xr-x 2 kawana member 4096 Apr 13 14:41 02958343_car
+drwxr-xr-x 2 kawana member 4096 Apr 13 12:16 03001627_chair
+drwxr-xr-x 2 kawana member 4096 Apr 13 05:48 03211117_display
+drwxr-xr-x 2 kawana member 4096 Apr 13 04:40 03636649_lamp
+drwxr-xr-x 2 kawana member 4096 Apr 13 11:09 03691459_loudspeaker
+drwxr-xr-x 2 kawana member 4096 Apr 13 19:13 04090263_rifle
+drwxr-xr-x 2 kawana member 4096 Apr 13 18:05 04256520_sofa
+drwxr-xr-x 2 kawana member 4096 Apr 13 07:26 04379243_table
+drwxr-xr-x 2 kawana member 4096 Apr 13 05:27 04401088_telephone
+drwxr-xr-x 2 kawana member 4096 Apr 13 10:28 04530566_vessel

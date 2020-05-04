@@ -12,6 +12,10 @@ from im2mesh.checkpoints import CheckpointIO
 import shutil
 import yaml
 from collections import OrderedDict
+import eval_utils
+from datetime import datetime
+
+date_str = datetime.now().strftime(('%Y%m%d_%H%M%S'))
 
 
 def represent_odict(dumper, instance):
@@ -30,57 +34,77 @@ yaml.add_constructor('tag:yaml.org,2002:map', construct_odict)
 parser = argparse.ArgumentParser(description='Evaluate mesh algorithms.')
 parser.add_argument('config', type=str, help='Path to config file.')
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
+parser.add_argument('--dontcopy', action='store_true', help='Do not use cuda.')
+parser.add_argument('--no_copy_but_create_new',
+                    action='store_true',
+                    help='Do not use cuda.')
+parser.add_argument('--use_config_in_eval_dir',
+                    action='store_true',
+                    help='Do not use cuda.')
 
 # Get configuration and basic arguments
 args, unknown_args = parser.parse_known_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
-for idx, arg in enumerate(unknown_args):
-    if arg.startswith('--'):
-        arg = arg.replace('--', '')
-        value = unknown_args[idx + 1]
-        keys = arg.split('.')
-        if keys[0] not in cfg:
-            cfg[keys[0]] = {}
-        child_cfg = cfg.get(keys[0], {})
-        for key in keys[1:]:
-            item = child_cfg.get(key, None)
-            if isinstance(item, dict):
-                child_cfg = item
-            elif item is None:
-                child_cfg[key] = value
-            else:
-                child_cfg[key] = type(item)(value)
+
+eval_utils.update_dict_with_options(cfg, unknown_args)
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
 
 # Shorthands
-if '--dontcopy' in unknown_args:
+
+if args.dontcopy:
     out_dir = cfg['training']['out_dir']
+elif args.use_config_in_eval_dir:
+    out_dir = os.path.dirname(args.config)
 else:
+    out_dir = os.path.join('out', cfg['data']['input_type'],
+                           os.path.basename(args.config).split('.')[0])
+    cfg['training']['out_dir'] = out_dir
     base_out_dir = cfg['training']['out_dir']
     out_dir = os.path.join(
         os.path.dirname(base_out_dir).replace('out', 'out/submission/eval'),
         os.path.basename(base_out_dir)) + '_' + datetime.now().strftime(
             ('%Y%m%d_%H%M%S'))
 print('out dir for eval: ', out_dir)
-if not '--dontcopy' in unknown_args:
+if not (args.dontcopy or args.use_config_in_eval_dir):
     if not os.path.exists(out_dir):
-        shutil.copytree(base_out_dir, out_dir)
+        if args.no_copy_but_create_new:
+            os.makedirs(out_dir)
+        else:
+            #shutil.copytree(base_out_dir, out_dir)
+            os.makedirs(out_dir)
+            best_file = cfg['test']['model_file']
+            best_path = os.path.join(base_out_dir, best_file)
+            shutil.copy2(best_path, out_dir)
     else:
         raise ValueError('out dir already exists')
 
-if not '--dontcopy' in unknown_args:
+threshold_txt_path = os.path.join(out_dir, 'threshold')
+if os.path.exists(threshold_txt_path):
+    with open(threshold_txt_path) as f:
+        threshold = float(f.readlines()[0].strip())
+        print('Use threshold in dir', threshold)
+        cfg['test']['threshold'] = threshold
+
+if not (args.dontcopy or args.use_config_in_eval_dir):
     patch_path = os.path.join(out_dir, 'diff.patch')
     subprocess.run('git diff > {}'.format(patch_path), shell=True)
-    weight_path = os.path.join(out_dir, cfg['test']['model_file'])
-    with open(weight_path, 'rb') as f:
-        md5 = hashlib.md5(f.read()).hexdigest()
-    cfg['test']['model_file_hash'] = md5
-    yaml.dump(cfg, open(os.path.join(out_dir, 'config.yaml'), 'w'))
+    if not cfg['test']['model_file'].startswith('http'):
+        weight_path = os.path.join(out_dir, cfg['test']['model_file'])
+        with open(weight_path, 'rb') as f:
+            md5 = hashlib.md5(f.read()).hexdigest()
+        cfg['test']['model_file_hash'] = md5
+yaml.dump(
+    cfg,
+    open(os.path.join(out_dir, 'eval_config_{}.yaml'.format(date_str)), 'w'))
 
 out_file = os.path.join(out_dir, 'eval_full.pkl')
 out_file_class = os.path.join(out_dir, 'eval.csv')
 
+if (args.dontcopy or args.use_config_in_eval_dir):
+    t = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_file = out_file.replace('.pkl', '_' + t + '.pkl')
+    out_file_class = out_file.replace('.csv', '_' + t + '.csv')
 # Dataset
 dataset = config.get_dataset('test', cfg, return_idx=True)
 model = config.get_model(cfg, device=device, dataset=dataset)
@@ -97,7 +121,6 @@ trainer = config.get_trainer(model, None, cfg, device=device)
 
 # Print model
 nparameters = sum(p.numel() for p in model.parameters())
-print(model)
 print('Total number of parameters: %d' % nparameters)
 
 # Evaluate
@@ -138,17 +161,6 @@ for it, data in enumerate(tqdm(test_loader)):
         'class name': category_name,
         'modelname': modelname,
     }
-
-    inputs = data.get('inputs', torch.empty(points.size(0), 0)).to(device)
-    angles = data.get('angles').to(device)
-    points = data.get('points').to(device)
-
-    feature = model.encode_inputs(inputs)
-
-    kwargs = {}
-    scaled_coord = points * cfg['trainer']['pnet_point_scale']
-    output = model.decode(scaled_coord, None, feature, angles=angles, **kwargs)
-    super_shape_point, surface_mask, sgn, sgn_BxNxNP, radius = output
 
     eval_dicts.append(eval_dict)
     eval_data = trainer.eval_step(data)

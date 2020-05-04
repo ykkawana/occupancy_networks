@@ -11,7 +11,8 @@ from pykeops.torch import LazyTensor
 import kaolin as kal
 import torch
 import warnings
-
+import time
+random.seed(0)
 # Maximum values for bounding box [-0.5, 0.5]^3
 EMPTY_PCL_DICT = {
     'completeness': np.sqrt(3),
@@ -38,8 +39,13 @@ class MeshEvaluator(object):
     Args:
         n_points (int): number of points to be used for evaluation
     '''
-    def __init__(self, n_points=100000):
+    def __init__(self,
+                 n_points=100000,
+                 is_sample_from_surface=False,
+                 is_normalize_by_side_length=False):
         self.n_points = n_points
+        self.is_sample_from_surface = is_sample_from_surface
+        self.is_normalize_by_side_length = is_normalize_by_side_length
 
     def eval_mesh(self,
                   mesh,
@@ -48,7 +54,8 @@ class MeshEvaluator(object):
                   points_iou,
                   occ_tgt,
                   is_eval_explicit_mesh=False,
-                  vertex_visibility=None):
+                  vertex_visibility=None,
+                  skip_iou=False):
         ''' Evaluates a mesh.
 
         Args:
@@ -58,31 +65,44 @@ class MeshEvaluator(object):
             points_iou (numpy_array): points tensor for IoU evaluation
             occ_tgt (numpy_array): GT occupancy values for IoU points
         '''
+        t0 = time.time()
         if is_eval_explicit_mesh:
-            assert vertex_visibility is not None
-            sampled_vertex_idx = np.zeros_like(vertex_visibility).astype(
-                np.bool)
-            pointcloud = mesh.vertices[vertex_visibility, :]
-            normals = mesh.vertex_normals[vertex_visibility, :]
+            if vertex_visibility is not None:
+                select_idx = vertex_visibility
+                if self.is_sample_from_surface and select_idx.sum(
+                ) > self.n_points:
+                    select_idx = np.random.choice(np.nonzero(select_idx)[0],
+                                                  size=self.n_points,
+                                                  replace=False)
+
+                pointcloud = mesh.vertices[select_idx, :]
+                normals = mesh.vertex_normals[select_idx, :]
+            else:
+                pointcloud = mesh.vertices
+                normals = mesh.vertex_normals
+            t0 = time.time()
             pointcloud = pointcloud.astype(np.float32)
             normals = normals.astype(np.float32)
+            #print('copy pcd and normals to cpu', time.time() - t0)
 
+            t0 = time.time()
             if pointcloud.shape[0] > self.n_points:
                 select_idx = random.sample(range(pointcloud.shape[0]),
                                            self.n_points)
-                pointcloud = pointcloud[select_idx:]
-            if normals.shape[0] > self.n_points:
-                select_idx = random.sample(range(normals.shape[0]),
-                                           self.n_points)
-                normals = normals[select_idx:]
+                pointcloud = pointcloud[select_idx, :]
+                #if normals.shape[0] > self.n_points:
+                #    select_idx = random.sample(range(normals.shape[0]),
+                #                               self.n_points)
+                normals = normals[select_idx, :]
             if pointcloud_tgt.shape[0] > pointcloud.shape[0]:
-                select_idx = random.sample(range(pointcloud.shape[0]),
+                select_idx = random.sample(range(pointcloud_tgt.shape[0]),
                                            pointcloud.shape[0])
                 pointcloud_tgt = pointcloud_tgt[select_idx, :]
-            if normals_tgt.shape[0] > normals.shape[0]:
-                select_idx = random.sample(range(normals.shape[0]),
-                                           pointcloud.shape[0])
+                #if normals_tgt.shape[0] > normals.shape[0]:
+                #    select_idx = random.sample(range(normals.shape[0]),
+                #                               pointcloud.shape[0])
                 normals_tgt = normals_tgt[select_idx, :]
+            #print('random sample points', time.time() - t0)
         else:
             if len(mesh.vertices) != 0 and len(mesh.faces) != 0:
                 pointcloud, idx = mesh.sample(self.n_points, return_index=True)
@@ -92,15 +112,21 @@ class MeshEvaluator(object):
                 pointcloud = np.empty((0, 3))
                 normals = np.empty((0, 3))
 
+        t0 = time.time()
         out_dict = self.eval_pointcloud(pointcloud, pointcloud_tgt, normals,
                                         normals_tgt)
+        #print('eval point cloud', time.time() - t0)
 
-        if len(mesh.vertices) != 0 and len(mesh.faces) != 0:
+        t0 = time.time()
+        if len(mesh.vertices) != 0 and len(
+                mesh.faces) != 0 and not skip_iou and False:
             occ = check_mesh_contains(mesh, points_iou)
             out_dict['iou'] = compute_iou(occ, occ_tgt)
         else:
             out_dict['iou'] = 0.
+        #print('iou', time.time() - t0)
 
+        #print("eval_mesh", time.time() - t0)
         return out_dict
 
     def eval_pointcloud(self,
@@ -131,21 +157,31 @@ class MeshEvaluator(object):
         # from thre predicted point cloud
         completeness, completeness_normals = distance_p2p(
             pointcloud_tgt, normals_tgt, pointcloud, normals)
-        completeness2 = completeness**2
 
+        if self.is_normalize_by_side_length:
+            normalize_scale = 1. / (
+                (pointcloud_tgt.max(axis=0) -
+                 pointcloud_tgt.min(axis=0)).max() / 10).item()
+            completeness = completeness * normalize_scale
+        t0 = time.time()
+        completeness2 = completeness**2
         completeness = completeness.mean()
         completeness2 = completeness2.mean()
         completeness_normals = completeness_normals.mean()
+        #print('calc compness', time.time() - t0)
 
         # Accuracy: how far are th points of the predicted pointcloud
         # from the target pointcloud
         accuracy, accuracy_normals = distance_p2p(pointcloud, normals,
                                                   pointcloud_tgt, normals_tgt)
+        if self.is_normalize_by_side_length:
+            accuracy = accuracy * normalize_scale
+        t0 = time.time()
         accuracy2 = accuracy**2
-
         accuracy = accuracy.mean()
         accuracy2 = accuracy2.mean()
         accuracy_normals = accuracy_normals.mean()
+        #print('calc accuracy', time.time() - t0)
 
         # Chamfer distance
         chamferL2 = 0.5 * (completeness2 + accuracy2)
@@ -184,17 +220,26 @@ class MeshEvaluator(object):
         '''
 
         if is_eval_explicit_mesh:
-            assert vertex_visibility is not None
-            pointcloud = mesh.vertices[vertex_visibility, :]
+            if vertex_visibility is not None:
+                select_idx = vertex_visibility
+                if self.is_sample_from_surface and select_idx.sum(
+                ) > self.n_points:
+                    select_idx = np.random.choice(np.nonzero(select_idx)[0],
+                                                  size=self.n_points,
+                                                  replace=False)
+                pointcloud = mesh.vertices[select_idx, :]
+            else:
+                pointcloud = mesh.vertices
+
             pointcloud = pointcloud.astype(np.float32)
 
             if pointcloud.shape[0] > self.n_points:
                 select_idx = random.sample(range(pointcloud.shape[0]),
                                            self.n_points)
-                pointcloud = pointcloud[select_idx:]
+                pointcloud = pointcloud[select_idx, :]
 
             if pointcloud_tgt.shape[0] > pointcloud.shape[0]:
-                select_idx = random.sample(range(pointcloud.shape[0]),
+                select_idx = random.sample(range(pointcloud_tgt.shape[0]),
                                            pointcloud.shape[0])
                 pointcloud_tgt = pointcloud_tgt[select_idx, :]
 
@@ -212,10 +257,17 @@ class MeshEvaluator(object):
             pointcloud = np.empty((0, 3))
         """
 
+        if self.is_normalize_by_side_length:
+            normalize_scale = 1. / ((pointcloud_tgt.max(axis=0) -
+                                     pointcloud_tgt.min(axis=0)).max()).item()
+        else:
+            normalize_scale = 1.
+
         out_dict = fscore(pointcloud[np.newaxis, ...],
                           pointcloud_tgt[np.newaxis, ...],
                           thresholds=thresholds,
-                          mode='pykeops')
+                          mode='pykeops',
+                          normalize_scale=normalize_scale)
         if out_dict is None:
             return out_dict
         else:
@@ -245,7 +297,11 @@ class MeshEvaluator(object):
         return out_dict
 
 
-def distance_p2p(points_src, normals_src, points_tgt, normals_tgt):
+def distance_p2p(points_src,
+                 normals_src,
+                 points_tgt,
+                 normals_tgt,
+                 mode='pykeops'):
     ''' Computes minimal distances of each point in points_src to points_tgt.
 
     Args:
@@ -254,22 +310,46 @@ def distance_p2p(points_src, normals_src, points_tgt, normals_tgt):
         points_tgt (numpy array): target points
         normals_tgt (numpy array): target normals
     '''
-    kdtree = KDTree(points_tgt)
-    dist, idx = kdtree.query(points_src)
+    assert mode in ['pykeops', 'original']
+    if mode == 'pykeops':
+        # output is in torch tensor
+        t0 = time.time()
+        dist, idx = one_sided_chamfer_distance_with_index(
+            points_src, points_tgt)
+        #print('calc dist and dix', time.time() - t0)
+        t0 = time.time()
+        dist = dist.to('cpu').numpy()
+        #print('copy dist to cpu', time.time() - t0)
+        if normals_src is not None and normals_tgt is not None:
+            t0 = time.time()
+            normals_src = torch.nn.functional.normalize(
+                torch.from_numpy(normals_src).to('cuda'), dim=-1)
+            normals_tgt = torch.nn.functional.normalize(
+                torch.from_numpy(normals_tgt).to('cuda'), dim=-1)
 
-    if normals_src is not None and normals_tgt is not None:
-        normals_src = \
-            normals_src / np.linalg.norm(normals_src, axis=-1, keepdims=True)
-        normals_tgt = \
-            normals_tgt / np.linalg.norm(normals_tgt, axis=-1, keepdims=True)
-
-        normals_dot_product = (normals_tgt[idx] * normals_src).sum(axis=-1)
-        # Handle normals that point into wrong direction gracefully
-        # (mostly due to mehtod not caring about this in generation)
-        normals_dot_product = np.abs(normals_dot_product)
+            normals_dot_product = (normals_tgt[idx] * normals_src).sum(
+                axis=-1).abs().to('cpu').numpy()
+            #print('calc normal const', time.time() - t0)
+        else:
+            normals_dot_product = np.array([np.nan] * points_src.shape[0],
+                                           dtype=np.float32)
     else:
-        normals_dot_product = np.array([np.nan] * points_src.shape[0],
-                                       dtype=np.float32)
+        kdtree = KDTree(points_tgt)
+        dist, idx = kdtree.query(points_src)
+
+        if normals_src is not None and normals_tgt is not None:
+            normals_src = \
+                normals_src / np.linalg.norm(normals_src, axis=-1, keepdims=True)
+            normals_tgt = \
+                normals_tgt / np.linalg.norm(normals_tgt, axis=-1, keepdims=True)
+
+            normals_dot_product = (normals_tgt[idx] * normals_src).sum(axis=-1)
+            # Handle normals that point into wrong direction gracefully
+            # (mostly due to mehtod not caring about this in generation)
+            normals_dot_product = np.abs(normals_dot_product)
+        else:
+            normals_dot_product = np.array([np.nan] * points_src.shape[0],
+                                           dtype=np.float32)
     return dist, normals_dot_product
 
 
@@ -304,7 +384,41 @@ def chamfer_distance(pred, target, pykeops=True):
     return pred2target, target2pred
 
 
-def fscore(pred_points, target_points, thresholds=[0.01], mode='pykeops'):
+def one_sided_chamfer_distance_with_index(source_points, target_points):
+    assert source_points.ndim in [2, 3]
+    assert target_points.ndim in [2, 3]
+    assert target_points.ndim == source_points.ndim
+    original_ndim = target_points.ndim
+    if isinstance(source_points, np.ndarray):
+        source_points = torch.from_numpy(source_points).to('cuda')
+    if isinstance(target_points, np.ndarray):
+        target_points = torch.from_numpy(target_points).to('cuda')
+
+    if source_points.ndim == 2:
+        source_points = source_points.unsqueeze(0)
+    if target_points.ndim == 2:
+        target_points = target_points.unsqueeze(0)
+
+    G_i1 = LazyTensor(source_points.unsqueeze(2))
+    X_j1 = LazyTensor(target_points.unsqueeze(1))
+
+    dist = (G_i1 - X_j1).norm2()
+
+    # N
+    idx = dist.argmin(dim=2).squeeze(-1)
+    pred2target = dist.min(2).squeeze(-1)
+    if original_ndim == 2:
+        idx = idx[0]
+        pred2target = pred2target[0]
+
+    return pred2target, idx
+
+
+def fscore(pred_points,
+           target_points,
+           thresholds=[0.01],
+           mode='pykeops',
+           normalize_scale=1.):
     assert mode in ['kaolin', 'pykeops']
     assert isinstance(thresholds, list)
 
@@ -342,6 +456,9 @@ def fscore(pred_points, target_points, thresholds=[0.01], mode='pykeops'):
 
         gt_distances, pred_distances = chamfer_distance(
             pred_points, target_points)
+
+        gt_distances = gt_distances * normalize_scale
+        pred_distances = pred_distances * normalize_scale
 
         for threshold in thresholds:
             fn = (pred_distances > threshold).sum(-1).float()

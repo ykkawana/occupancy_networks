@@ -1,47 +1,39 @@
 method: atlasnetv2
 data:
   path: data/ShapeNet
-  train_split: train # Overfit to train data, see if training is working
-  val_split: train
-  test_split: train
-  classes: ['02691156'] # plane
   img_folder: img_choy2016
   img_size: 224 
-  input_type: pointcloud
-  pointcloud_n: 2500
-  #pointcloud_noise: 0.000
   pointcloud_target_n: 4096
-  patch_side_length: 16 # will be powered by dim - 1, if dim == 3, then 900
+  patch_side_length: 20 # will be powered by dim - 1, if dim == 3, then 900
   is_generate_mesh: false
-  debug:
-    sample_n: 50
 model:
   encoder_latent: null
   decoder: atlasnetv2decoder 
-  encoder: pointnet_atlasnetv2
-  encoder_kwargs:
-    hidden_dim: 1024
-  c_dim: 2500
+  encoder: resnet18
+  c_dim: 256
   z_dim: 0
   decoder_kwargs:
-    npatch: 10
+    npatch: 3
     patchDim: 2
     patchDeformDim: 3
-    hidden_size: 1024
+    hidden_size: 256
 training:
-  out_dir:  out/img/debug_atlasnetv2_pointnet
-  batch_size: 10
+  out_dir:  out/img/atlasnetv2_pn3_debugged
+  batch_size: 20
   val_batch_size: 2
   model_selection_metric: cd1
   model_selection_mode: minimize
-  visualize_every: 500
-  validate_every: 1000
+  visualize_every: 1000
+  validate_every: 2500
   checkpoint_every: 100000
   skip_load_pretrained_optimizer: false
+  debugged: true
   learning_rate: 1e-3
   learning_rage_decay_at:
     - 250
     - 300
+trainer:
+  point_scale: 2
 test:
   threshold: 0.5
   eval_mesh: true

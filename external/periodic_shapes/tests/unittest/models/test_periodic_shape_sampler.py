@@ -782,11 +782,12 @@ def test_decoder_consistency_OtherDecoders():
         #decoder_class='PrimitiveWiseGroupConvDecoderLegacy',
         last_scale=10,
         no_encoder=True,
-        is_shape_sampler_sphere=True,
-        spherical_angles=True,
-        is_feature_coord=True,
-        is_feature_angles=False,
+        is_shape_sampler_sphere=False,
+        spherical_angles=False,
+        is_feature_coord=False,
+        is_feature_angles=True,
         is_feature_radius=False,
+        is_infer_r1r2=False,
         dim=dim)
     preset_params = utils.generate_multiple_primitive_params(
         m,

@@ -12,13 +12,18 @@ from im2mesh.checkpoints import CheckpointIO
 import wandb
 import dotenv
 
-dotenv.load_dotenv(verbose=True)
+dotenv.load_dotenv('/home/mil/kawana/workspace/occupancy_networks/.env',
+                   verbose=True)
+os.environ['WANDB_PROJECT'] = 'periodic_shape_occupancy_networks'
 
 # Arguments
 parser = argparse.ArgumentParser(
     description='Train a 3D reconstruction model.')
 parser.add_argument('config', type=str, help='Path to config file.')
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
+parser.add_argument('--data_parallel',
+                    action='store_true',
+                    help='Train with data parallel.')
 parser.add_argument(
     '--exit-after',
     type=int,
@@ -35,7 +40,10 @@ device = torch.device("cuda" if is_cuda else "cpu")
 t0 = time.time()
 
 # Shorthands
-out_dir = cfg['training']['out_dir']
+#out_dir = cfg['training']['out_dir']
+out_dir = os.path.join('out', cfg['data']['input_type'],
+                       os.path.basename(args.config).split('.')[0])
+cfg['training']['out_dir'] = out_dir
 batch_size = cfg['training']['batch_size']
 backup_every = cfg['training']['backup_every']
 exit_after = args.exit_after
@@ -62,8 +70,13 @@ if 'debug' in cfg['data']:
 else:
     train_shuffle = True
 
+if args.data_parallel:
+    dist_coef = 1
+else:
+    dist_coef = 1
+
 train_loader = torch.utils.data.DataLoader(train_dataset,
-                                           batch_size=batch_size,
+                                           batch_size=batch_size * dist_coef,
                                            num_workers=4,
                                            shuffle=train_shuffle,
                                            collate_fn=data.collate_remove_none,
@@ -72,37 +85,44 @@ train_loader = torch.utils.data.DataLoader(train_dataset,
 
 val_loader = torch.utils.data.DataLoader(
     val_dataset,
-    batch_size=cfg['training']['val_batch_size'],
+    batch_size=cfg['training']['val_batch_size'] * dist_coef,
     num_workers=4,
     shuffle=False,
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
 
 # For visualizations
-vis_loader = torch.utils.data.DataLoader(val_dataset,
-                                         batch_size=cfg['training'].get(
-                                             'vis_batch_size', 1),
-                                         shuffle=False,
-                                         collate_fn=data.collate_remove_none,
-                                         worker_init_fn=data.worker_init_fn)
+vis_loader = torch.utils.data.DataLoader(
+    val_dataset,
+    batch_size=cfg['training'].get('vis_batch_size', 1) * dist_coef,
+    shuffle=False,
+    collate_fn=data.collate_remove_none,
+    worker_init_fn=data.worker_init_fn)
 data_vis = next(iter(vis_loader))
 
 # Model
 model = config.get_model(cfg, device=device, dataset=train_dataset)
-
 # Intialize training
 npoints = 1000
-learning_rate = float(cfg['training'].get('learning_rate', 1e-4))
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-# optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
-
-trainer = config.get_trainer(model, optimizer, cfg, device=device)
+learning_rate = float(cfg['training'].get('learning_rate', 1e-4)) * dist_coef
+if not args.data_parallel:
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    trainer = config.get_trainer(model, optimizer, cfg, device=device)
 
 if cfg['training'].get('skip_load_pretrained_optimizer', False):
     print('skip loading optimizer')
     checkpoint_io = CheckpointIO(out_dir, model=model)
-else:
+elif not args.data_parallel:
     checkpoint_io = CheckpointIO(out_dir, model=model, optimizer=optimizer)
+else:
+    assert args.data_parallel and not cfg['training'].get(
+        'skip_load_pretrained_optimizer', False)
+    checkpoint_io = CheckpointIO(out_dir, model=model)
+    model = torch.nn.DataParallel(model)
+    torch.backends.cudnn.benchmark = True
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    CheckpointIO(out_dir, optimizer=optimizer)
+    trainer = config.get_trainer(model, optimizer, cfg, device=device)
 try:
     load_dict = checkpoint_io.load('model.pt')
 except FileExistsError:

@@ -39,7 +39,8 @@ class Shapes3dDataset(data.Dataset):
                  split=None,
                  categories=None,
                  no_except=True,
-                 transform=None):
+                 transform=None,
+                 cfg=None):
         ''' Initialization of the the 3D shape dataset.
 
         Args:
@@ -84,6 +85,12 @@ class Shapes3dDataset(data.Dataset):
             if not os.path.isdir(subpath):
                 logger.warning('Category %s does not exist in dataset.' % c)
 
+            if cfg is not None and 'semseg_path' in cfg['data']:
+                subpath = subpath.replace(cfg['data']['path'],
+                                          cfg['data']['semseg_path'])
+            elif cfg is not None and 'bspnet' in cfg['data']:
+                subpath = subpath.replace(cfg['data']['path'],
+                                          cfg['data']['bspnet']['path'])
             split_file = os.path.join(subpath, split + '.lst')
             with open(split_file, 'r') as f:
                 models_c = f.read().split('\n')

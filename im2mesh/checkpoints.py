@@ -41,18 +41,18 @@ class CheckpointIO(object):
 
         wandb.save(filename)
 
-    def load(self, filename):
+    def load(self, filename, device=None):
         '''Loads a module dictionary from local file or url.
         
         Args:
             filename (str): name of saved module dictionary
         '''
         if is_url(filename):
-            return self.load_url(filename)
+            return self.load_url(filename, device=device)
         else:
-            return self.load_file(filename)
+            return self.load_file(filename, device=device)
 
-    def load_file(self, filename):
+    def load_file(self, filename, device=None):
         '''Loads a module dictionary from file.
         
         Args:
@@ -66,12 +66,15 @@ class CheckpointIO(object):
             print(filename)
             print('=> Loading checkpoint from local file...')
             state_dict = torch.load(filename)
-            scalars = self.parse_state_dict(state_dict)
+            if 'model' not in state_dict:
+                print('Detect weight file trained outside of occ env.')
+                state_dict = {'model': state_dict}
+            scalars = self.parse_state_dict(state_dict, device=device)
             return scalars
         else:
             raise FileExistsError
 
-    def load_url(self, url):
+    def load_url(self, url, device=None):
         '''Load a module dictionary from url.
         
         Args:
@@ -80,10 +83,10 @@ class CheckpointIO(object):
         print(url)
         print('=> Loading checkpoint from url...')
         state_dict = model_zoo.load_url(url, progress=True)
-        scalars = self.parse_state_dict(state_dict)
+        scalars = self.parse_state_dict(state_dict, device=device)
         return scalars
 
-    def parse_state_dict(self, state_dict):
+    def parse_state_dict(self, state_dict, device=None):
         '''Parse state_dict of model and return scalars.
         
         Args:
@@ -98,6 +101,7 @@ class CheckpointIO(object):
         """
         for k, v in self.module_dict.items():
             if k in state_dict:
+                print('load parameter')
                 #if False:
                 if k == 'model':
                     pretrained_dict = state_dict[k]
@@ -122,13 +126,18 @@ class CheckpointIO(object):
                     for key in pretrained_dict_new_param:
                         print(key, pretrained_dict_new_param[key].shape)
                     new_pretrained_dict.update(pretrained_dict_new_param)
-                    v.load_state_dict(new_pretrained_dict)
+                    if device is not None:
+                        v.load_state_dict(new_pretrained_dict)
+                    else:
+                        v.load_state_dict(new_pretrained_dict)
+
                 else:
                     v.load_state_dict(state_dict[k])
         scalars = {
             k: v
             for k, v in state_dict.items() if k not in self.module_dict
         }
+        print('load done')
         return scalars
 
 

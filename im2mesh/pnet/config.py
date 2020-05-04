@@ -153,14 +153,21 @@ def get_data_fields(mode, cfg):
             sdf_points_transform,
             with_transforms=with_transforms)
 
-    pointcloud_transform = data.SubsamplePointcloud(
-        cfg['data']['pointcloud_target_n'])
-    if cfg.get('sdf_generation', False):
-        pointcloud_transform = None
+    if cfg['test'].get('is_eval_semseg', False):
+        fields['labeled_pointcloud'] = data.PartLabeledPointCloudField(
+            cfg['data']['semseg_pointcloud_file'], cfg)
 
-    fields['pointcloud'] = data.PointCloudField(cfg['data']['pointcloud_file'],
-                                                pointcloud_transform,
-                                                with_transforms=True)
+    else:
+        pointcloud_transform = data.SubsamplePointcloud(
+            cfg['data']['pointcloud_target_n'])
+        if cfg.get('sdf_generation', False):
+            pointcloud_transform = None
+
+        fields['pointcloud'] = data.PointCloudField(
+            cfg['data']['pointcloud_file'],
+            pointcloud_transform,
+            cfg,
+            with_transforms=True)
     fields['angles'] = data.SphericalCoordinateField(
         cfg['data']['primitive_points_sample_n'],
         mode,

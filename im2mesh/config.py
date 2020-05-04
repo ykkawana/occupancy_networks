@@ -1,7 +1,7 @@
 import yaml
 from torchvision import transforms
 from im2mesh import data
-from im2mesh import onet, r2n2, psgn, pix2mesh, dmc, pnet, atlasnetv2
+from im2mesh import onet, r2n2, psgn, pix2mesh, dmc, pnet, atlasnetv2, bspnet
 from im2mesh import preprocess
 from torch.utils import data as torch_data
 
@@ -12,7 +12,8 @@ method_dict = {
     'pix2mesh': pix2mesh,
     'dmc': dmc,
     'pnet': pnet,
-    'atlasnetv2': atlasnetv2
+    'atlasnetv2': atlasnetv2,
+    'bspnet': bspnet
 }
 
 
@@ -149,12 +150,11 @@ def get_dataset(mode, cfg, return_idx=False, return_category=False):
         if return_category:
             fields['category'] = data.CategoryField()
 
-        dataset = data.Shapes3dDataset(
-            dataset_folder,
-            fields,
-            split=split,
-            categories=categories,
-        )
+        dataset = data.Shapes3dDataset(dataset_folder,
+                                       fields,
+                                       split=split,
+                                       categories=categories,
+                                       cfg=cfg)
     elif dataset_type == 'kitti':
         dataset = data.KittiDataset(dataset_folder,
                                     img_size=cfg['data']['img_size'],
@@ -215,6 +215,9 @@ def get_inputs_field(mode, cfg):
 
         inputs_field = data.ImagesField(cfg['data']['img_folder'],
                                         transform,
+                                        cfg,
+                                        extension=cfg['data'].get(
+                                            'img_extension', 'jpg'),
                                         with_camera=with_camera,
                                         random_view=random_view)
     elif input_type == 'pointcloud':

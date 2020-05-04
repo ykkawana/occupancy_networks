@@ -6,6 +6,7 @@ from im2mesh.encoder import encoder_dict
 from im2mesh.atlasnetv2 import models, training, generation
 from im2mesh import data
 from im2mesh import config
+from atlasnetv2.auxiliary.utils import weights_init
 
 
 def get_model(cfg, device=None, dataset=None, **kwargs):
@@ -50,7 +51,8 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
                               encoder_latent,
                               p0_z,
                               device=device)
-
+    if cfg['data']['input_type'] == 'pointcloud':
+        model.apply(weights_init)
     return model
 
 
@@ -68,15 +70,15 @@ def get_trainer(model, optimizer, cfg, device, **kwargs):
     vis_dir = os.path.join(out_dir, 'vis')
     input_type = cfg['data']['input_type']
 
-    trainer = training.Trainer(
-        model,
-        optimizer,
-        device=device,
-        input_type=input_type,
-        vis_dir=vis_dir,
-        threshold=threshold,
-        eval_sample=cfg['training']['eval_sample'],
-    )
+    trainer = training.Trainer(model,
+                               optimizer,
+                               device=device,
+                               input_type=input_type,
+                               vis_dir=vis_dir,
+                               threshold=threshold,
+                               eval_sample=cfg['training']['eval_sample'],
+                               debugged=cfg['training'].get('debugged', False),
+                               **cfg['trainer'])
 
     return trainer
 
@@ -101,7 +103,8 @@ def get_generator(model, cfg, device, **kwargs):
         refinement_step=cfg['generation']['refinement_step'],
         simplify_nfaces=cfg['generation']['simplify_nfaces'],
         preprocessor=preprocessor,
-    )
+        debugged=cfg['training'].get('debugged', False),
+        point_scale=cfg['trainer']['point_scale'])
     return generator
 
 
@@ -140,6 +143,10 @@ def get_data_fields(mode, cfg):
     fields['patch'] = data.PlanarPatchField(
         mode, cfg['data'].get('patch_side_length', 20),
         cfg['data'].get('is_generate_mesh', False))
+
+    if cfg['test'].get('is_eval_semseg', False):
+        fields['labeled_pointcloud'] = data.PartLabeledPointCloudField(
+            cfg['data']['semseg_pointcloud_file'], cfg)
 
     pointcloud_transform = data.SubsamplePointcloud(
         cfg['data']['pointcloud_target_n'])

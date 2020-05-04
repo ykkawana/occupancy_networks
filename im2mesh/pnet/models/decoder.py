@@ -60,6 +60,7 @@ class PeriodicShapeDecoderSimplest(nn.Module):
         return_sdf=False,
         is_radius_reg=False,
         spherical_angles=False,
+        extract_surface_point_by_max=False,
         last_scale=.1):
         super().__init__()
         assert dim in [2, 3]
@@ -113,6 +114,7 @@ class PeriodicShapeDecoderSimplest(nn.Module):
             is_feature_radius=is_feature_radius,
             no_last_bias=no_last_bias,
             spherical_angles=spherical_angles,
+            extract_surface_point_by_max=extract_surface_point_by_max,
             return_sdf=return_sdf)
         # simple_sampler = super_shape_sampler.SuperShapeSampler(max_m,
         #                                                        n_primitives,
@@ -142,25 +144,26 @@ class PeriodicShapeDecoderSimplest(nn.Module):
                                     points=feature,
                                     return_surface_mask=True)
             pcoord, o1, o2, o3 = output
-            if self.is_radius_reg:
-                # B, N, P, dim
-                # pcoord
-
-                # B, N, 1, dim
-                transition = params['transition'].unsqueeze(2)
-                pcentered_coord = pcoord - transition
-                radius = (pcentered_coord**2).sum(-1).clamp(min=EPS).sqrt()
-                output = (pcoord, o1, o2, o3, radius)
-
-            else:
-                output = (pcoord, o1, o2, o3, None)
-
         else:
             output = self.simple_sampler(params,
                                          thetas=angles,
                                          coord=coord,
                                          points=color_feature,
                                          return_surface_mask=True)
+            pcoord, o1, o2, o3 = output
+        if self.is_radius_reg:
+            # B, N, P, dim
+            # pcoord
+
+            # B, N, 1, dim
+            transition = params['transition'].unsqueeze(2)
+            pcentered_coord = pcoord - transition
+            radius = (pcentered_coord**2).sum(-1).clamp(min=EPS).sqrt()
+            output = (pcoord, o1, o2, o3, radius)
+
+        else:
+            output = (pcoord, o1, o2, o3, None)
+
         #shapes = [[10, 12, 900, 3], [10, 12, 900], [10, 12, 2048]]  #,
         #[10, 12, 10800]]
         """

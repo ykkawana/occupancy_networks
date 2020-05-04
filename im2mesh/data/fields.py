@@ -68,6 +68,7 @@ class ImagesField(Field):
     def __init__(self,
                  folder_name,
                  transform=None,
+                 cfg=None,
                  extension='jpg',
                  random_view=True,
                  with_camera=False):
@@ -76,6 +77,19 @@ class ImagesField(Field):
         self.extension = extension
         self.random_view = random_view
         self.with_camera = with_camera
+        self.cfg = cfg
+
+        self.is_bspnet = False
+        if cfg is not None and self.cfg['method'] == 'bspnet':
+            self.is_bspnet = True
+            assert 'bspnet' in self.cfg['data']
+            bspnet_config = self.cfg['data']['bspnet']
+            assert bspnet_config['path'].startswith('data')
+
+            assert not self.with_camera
+
+            self.extension = bspnet_config['extension']
+            self.folder_name = bspnet_config['img_folder']
 
     def load(self, model_path, idx, category):
         ''' Loads the data point.
@@ -85,6 +99,10 @@ class ImagesField(Field):
             idx (int): ID of data point
             category (int): index of category
         '''
+        if self.is_bspnet:
+            model_path = model_path.replace(self.cfg['data']['path'],
+                                            self.cfg['data']['bspnet']['path'])
+
         folder = os.path.join(model_path, self.folder_name)
         files = glob.glob(os.path.join(folder, '*.%s' % self.extension))
         if self.random_view:
@@ -93,9 +111,15 @@ class ImagesField(Field):
             idx_img = 0
         filename = files[idx_img]
 
-        image = Image.open(filename).convert('RGB')
-        if self.transform is not None:
-            image = self.transform(image)
+        if self.is_bspnet:
+
+            image = np.load(filename)['image']
+            # 1 x 128 x 128
+            image = torch.from_numpy(image)
+        else:
+            image = Image.open(filename).convert('RGB')
+            if self.transform is not None:
+                image = self.transform(image)
 
         data = {None: image}
 
@@ -238,10 +262,23 @@ class PointCloudField(Field):
         with_transforms (bool): whether scaling and rotation dat should be
             provided
     '''
-    def __init__(self, file_name, transform=None, with_transforms=False):
+    def __init__(self,
+                 file_name,
+                 transform=None,
+                 cfg=None,
+                 with_transforms=False):
         self.file_name = file_name
         self.transform = transform
         self.with_transforms = with_transforms
+        self.cfg = cfg
+
+        self.is_bspnet = False
+        if cfg is not None and self.cfg['method'] == 'bspnet':
+            self.is_bspnet = True
+            assert 'bspnet' in self.cfg['data']
+            bspnet_config = self.cfg['data']['bspnet']
+            assert bspnet_config['path'].startswith('data')
+            assert 'pointcloud_file' in bspnet_config
 
     def load(self, model_path, idx, category):
         ''' Loads the data point.
@@ -262,6 +299,15 @@ class PointCloudField(Field):
             None: points,
             'normals': normals,
         }
+
+        if self.is_bspnet:
+            bsp_model_path = model_path.replace(
+                self.cfg['data']['path'], self.cfg['data']['bspnet']['path'])
+
+            data['imnet_points'] = torch.from_numpy(
+                trimesh.load(
+                    os.path.join(bsp_model_path, self.cfg['data']['bspnet']
+                                 ['pointcloud_file'])).vertices)
 
         if self.with_transforms and 'loc' in data and 'scale' in data:
             data['loc'] = pointcloud_dict['loc'].astype(np.float32)
@@ -559,3 +605,57 @@ class PlanarPatchField(Field):
                 'mesh_faces': self.faces.clone()
             })
         return data
+
+
+class PartLabeledPointCloudField(Field):
+    ''' Point cloud field.
+
+    It provides the field used for point cloud data. These are the points
+    randomly sampled on the mesh.
+
+    Args:
+        file_name (str): file name
+        transform (list): list of transformations applied to data points
+        with_transforms (bool): whether scaling and rotation dat should be
+            provided
+    '''
+    def __init__(self, file_name, cfg, transform=None):
+        self.file_name = file_name
+        self.transform = transform
+        self.shapenet_path = cfg['data']['path']
+        self.semseg_shapenet_path = cfg['data']['semseg_path']
+
+    def load(self, model_path, idx, category):
+        ''' Loads the data point.
+
+        Args:
+            model_path (str): path to model
+            idx (int): ID of data point
+            category (int): index of category
+        '''
+        model_path = model_path.replace(self.shapenet_path,
+                                        self.semseg_shapenet_path)
+        file_path = os.path.join(model_path, self.file_name)
+
+        pointcloud_dict = np.load(file_path)
+
+        points = pointcloud_dict['points'].astype(np.float32)
+        labels = pointcloud_dict['labels'].astype(np.float32)
+
+        data = {
+            None: points,
+            'labels': labels,
+        }
+
+        if self.transform is not None:
+            data = self.transform(data)
+
+        return data
+
+    def check_complete(self, files):
+        ''' Check if field is complete.
+        
+        Args:
+            files: files
+        '''
+        return True

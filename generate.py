@@ -1,6 +1,8 @@
-import torch
 # import torch.distributions as dist
 import os
+os.environ['CUDA_PATH'] = '/usr/local/cuda-10.0'
+
+import torch
 import shutil
 import argparse
 from tqdm import tqdm
@@ -18,6 +20,7 @@ import subprocess
 import yaml
 from datetime import datetime
 import subprocess
+import eval_utils
 
 
 def represent_odict(dumper, instance):
@@ -45,69 +48,66 @@ parser.add_argument('--unique_name',
                     default='',
                     type=str,
                     help='String name for generation.')
+parser.add_argument('--resume_generation_dir',
+                    default=None,
+                    type=str,
+                    help='String name for generation.')
 
 args, unknown_args = parser.parse_known_args()
+if args.resume_generation_dir is not None:
+    assert os.path.isabs(args.resume_generation_dir)
 
 cfg = config.load_config(args.config, 'configs/default.yaml')
 
-for idx, arg in enumerate(unknown_args):
-    if arg.startswith('--'):
-        arg = arg.replace('--', '')
-        value = unknown_args[idx + 1]
-        keys = arg.split('.')
-        if keys[0] not in cfg:
-            cfg[keys[0]] = {}
-        child_cfg = cfg.get(keys[0], {})
-        for key in keys[1:]:
-            item = child_cfg.get(key, None)
-            if isinstance(item, dict):
-                child_cfg = item
-            elif item is None:
-                if value == 'true':
-                    value = True
-                if value == 'false':
-                    value = False
-                if value == 'null':
-                    value = None
-                if isinstance(value, str) and value.isdigit():
-                    value = float(value)
-                child_cfg[key] = value
-            else:
-                child_cfg[key] = type(item)(value)
+eval_utils.update_dict_with_options(cfg, unknown_args)
+
 date_str = datetime.now().strftime(('%Y%m%d_%H%M%S'))
 if args.explicit:
-    assert cfg['data'].get('is_normal_icosahedron', False) or cfg['data'].get(
-        'is_normal_uv_sphere', False)
+    if cfg['method'] == 'pnet':
+        assert cfg['data'].get('is_normal_icosahedron',
+                               False) or cfg['data'].get(
+                                   'is_normal_uv_sphere', False)
+    elif cfg['method'] == 'atlasnetv2':
+        assert cfg['data'].get('is_generate_mesh', False)
+
     cfg['generation']['is_explicit_mesh'] = True
     cfg['test']['is_eval_explicit_mesh'] = True
-if args.explicit:
     cfg['generation']['generation_dir'] += '_explicit'
-cfg['generation']['generation_dir'] += ('_' + date_str)
+
+cfg['generation']['generation_dir'] += ('_' + args.unique_name + '_' +
+                                        date_str)
 
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
 
-out_dir = os.path.dirname(args.config)
+if args.resume_generation_dir is None:
+    out_dir = os.path.dirname(args.config)
+    generation_dir = os.path.join(out_dir, cfg['generation']['generation_dir'])
+else:
+    out_dir = os.path.dirname(args.resume_generation_dir)
+    generation_dir = args.resume_generation_dir
 
-generation_dir = os.path.join(out_dir, cfg['generation']['generation_dir'])
-if not os.path.exists(generation_dir):
+if not os.path.exists(generation_dir) and args.resume_generation_dir is None:
     os.makedirs(generation_dir)
+
+if args.resume_generation_dir is None:
+    patch_path = os.path.join(generation_dir, 'gen_diff.patch')
+    subprocess.run('git diff > {}'.format(patch_path), shell=True)
+    if not cfg['test']['model_file'].startswith('http'):
+        weight_path = os.path.join(out_dir, cfg['test']['model_file'])
+        with open(weight_path, 'rb') as f:
+            md5 = hashlib.md5(f.read()).hexdigest()
+        cfg['test']['model_file_hash'] = md5
+    yaml.dump(
+        cfg,
+        open(
+            os.path.join(
+                generation_dir,
+                'gen_config_{}_{}.yaml'.format(args.unique_name, date_str)),
+            'w'))
+
 out_time_file = os.path.join(generation_dir, 'time_generation_full.pkl')
 out_time_file_class = os.path.join(generation_dir, 'time_generation.pkl')
-
-patch_path = os.path.join(generation_dir, 'gen_diff.patch')
-subprocess.run('git diff > {}'.format(patch_path), shell=True)
-weight_path = os.path.join(out_dir, cfg['test']['model_file'])
-with open(weight_path, 'rb') as f:
-    md5 = hashlib.md5(f.read()).hexdigest()
-cfg['test']['model_file_hash'] = md5
-yaml.dump(
-    cfg,
-    open(
-        os.path.join(
-            out_dir, 'gen_config_{}_{}.yaml'.format(args.unique_name,
-                                                    date_str)), 'w'))
-
 batch_size = cfg['generation']['batch_size']
 input_type = cfg['data']['input_type']
 vis_n_outputs = cfg['generation']['vis_n_outputs']
@@ -121,7 +121,7 @@ dataset = config.get_dataset('test', cfg, return_idx=True)
 model = config.get_model(cfg, device=device, dataset=dataset)
 
 checkpoint_io = CheckpointIO(out_dir, model=model)
-checkpoint_io.load(cfg['test']['model_file'])
+checkpoint_io.load(cfg['test']['model_file'], device=device)
 
 # Generator
 generator = config.get_generator(model, cfg, device=device)
@@ -222,27 +222,75 @@ for it, data in enumerate(tqdm(test_loader)):
         out_file_dict['gt'] = modelpath
 
     if generate_mesh:
+        # Checkfile exists
+        is_input_file_exists = False
+        if input_type == 'img':
+            inputs_path = os.path.join(in_dir, '%s.jpg' % modelname)
+        elif input_type == 'voxels':
+            inputs_path = os.path.join(in_dir, '%s.off' % modelname)
+        elif input_type == 'pointcloud':
+            inputs_path = os.path.join(in_dir, '%s.ply' % modelname)
+        if os.path.exists(input_type):
+            is_input_file_exists = True
+
+        # Write output
+        is_mesh_file_exists = False
+        mesh_out_file = os.path.join(mesh_dir, '%s.off' % modelname)
+        if os.path.exists(mesh_out_file):
+            is_mesh_file_exists = True
+
+        is_vertex_attribute_file_exists = False
+        visibility_out_file = ''
+        if cfg['generation'].get('is_explicit_mesh',
+                                 False) and cfg['method'] == 'pnet':
+            visibility_out_file = os.path.join(
+                mesh_dir, '%s_vertex_visbility.npz' % modelname)
+        elif cfg['method'] == 'bspnet':
+            visibility_out_file = os.path.join(
+                mesh_dir, '%s_vertex_attributes.npz' % modelname)
+        if os.path.exists(visibility_out_file):
+            is_vertex_attribute_file_exists = True
+
+        if is_input_file_exists and is_mesh_file_exists and is_vertex_attribute_file_exists and args.resume_generation_dir is not None:
+            print('pass', category_id, modelname)
+            continue
+
         t0 = time.time()
         out = generator.generate_mesh(data)
         time_dict['mesh'] = time.time() - t0
 
         # Get statistics
-        try:
-            mesh, stats_dict = out
-        except TypeError:
-            mesh, stats_dict = out, {}
+        if cfg['method'] == 'bspnet':
+            try:
+                mesh, stats_dict, vertices, normals, visibility = out
+            except TypeError:
+                mesh, vertices, normals, visibility = out
+                stats_dict = {}
+            if mesh is None:
+                continue
+        else:
+            try:
+                mesh, stats_dict = out
+            except TypeError:
+                mesh, stats_dict = out, {}
         time_dict.update(stats_dict)
 
         # Write output
-        mesh_out_file = os.path.join(mesh_dir, '%s.off' % modelname)
         mesh.export(mesh_out_file)
         out_file_dict['mesh'] = mesh_out_file
-        if cfg['generation'].get('is_explicit_mesh', False):
+        if cfg['generation'].get('is_explicit_mesh',
+                                 False) and cfg['method'] == 'pnet':
             visibility = mesh.vertex_attributes['vertex_visibility']
-            visibility_out_file = os.path.join(
-                mesh_dir, '%s_vertex_visbility.npz' % modelname)
+
             np.savez(visibility_out_file, vertex_visibility=visibility)
             out_file_dict['vertex_visibility'] = visibility_out_file
+
+        elif cfg['method'] == 'bspnet':
+            np.savez(visibility_out_file,
+                     vertex_visibility=visibility,
+                     vertices=vertices,
+                     normals=normals)
+            out_file_dict['vertex_attributes'] = visibility_out_file
 
     if generate_pointcloud:
         t0 = time.time()
@@ -257,7 +305,10 @@ for it, data in enumerate(tqdm(test_loader)):
         # Save inputs
         if input_type == 'img':
             inputs_path = os.path.join(in_dir, '%s.jpg' % modelname)
-            inputs = data['inputs'].squeeze(0).cpu()
+            if cfg['method'] == 'bspnet':
+                inputs = data['inputs'].squeeze(0).expand(3, -1, -1).cpu()
+            else:
+                inputs = data['inputs'].squeeze(0).cpu()
             visualize_data(inputs, 'img', inputs_path)
             out_file_dict['in'] = inputs_path
         elif input_type == 'voxels':
