@@ -43,9 +43,13 @@ class Trainer(BaseTrainer):
                  self_overlap_reg_threshold=0.1,
                  add_pointcloud_occ=False,
                  is_logits_by_max=False,
+                 is_logits_by_steeper_last_sigmoid_slope=False,
+                 is_logits_by_relu_sum=False,
+                 is_logits_by_max_with_scale=False,
                  is_strict_chamfer=False,
                  is_logits_by_sign_filter=False,
                  is_normal_loss=False,
+                 is_normal_loss_by_sgn_gradient=False,
                  is_onet_style_occ_loss=False,
                  is_logits_by_softmax=False,
                  is_l2_occ_loss=False,
@@ -53,6 +57,7 @@ class Trainer(BaseTrainer):
                  is_sdf=False,
                  is_logits_by_logsumexp=False,
                  is_logits_by_min=False,
+                 is_get_radius_direction_as_normals=False,
                  is_cvx_net_merged_loss=False,
                  cvx_net_merged_loss_topk_samples=10,
                  cvx_net_merged_loss_coef=1,
@@ -82,6 +87,7 @@ class Trainer(BaseTrainer):
         self.is_strict_chamfer = is_strict_chamfer
         self.is_logits_by_sign_filter = is_logits_by_sign_filter
         self.is_normal_loss = is_normal_loss
+        self.is_normal_loss_by_sgn_gradient = is_normal_loss_by_sgn_gradient
         self.is_onet_style_occ_loss = is_onet_style_occ_loss
         self.is_logits_by_softmax = is_logits_by_softmax
         self.is_l2_occ_loss = is_l2_occ_loss
@@ -97,6 +103,10 @@ class Trainer(BaseTrainer):
         self.is_radius_reg = is_radius_reg
         self.radius_reg_coef = radius_reg_coef
         self.use_surface_mask = use_surface_mask
+        self.is_get_radius_direction_as_normals = is_get_radius_direction_as_normals
+        self.is_logits_by_steeper_last_sigmoid_slope = is_logits_by_steeper_last_sigmoid_slope
+        self.is_logits_by_relu_sum = is_logits_by_relu_sum
+        self.is_logits_by_max_with_scale = is_logits_by_max_with_scale
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -186,6 +196,10 @@ class Trainer(BaseTrainer):
         occ_iou_hat_np = (logits >= threshold).cpu().numpy()
         iou = compute_iou(occ_iou_np, occ_iou_hat_np).mean()
         eval_dict['iou'] = iou
+
+        eval_dict['overlap'] = (torch.where(sgn >= 0, torch.ones_like(sgn),
+                                            torch.zeros_like(sgn)).sum(1) >
+                                1).sum().detach().cpu().numpy().item()
 
         # Estimate voxel iou
         if voxels_occ is not None:
@@ -313,10 +327,14 @@ class Trainer(BaseTrainer):
         angles = data.get('angles').to(device)
         pointcloud = data['pointcloud'].to(device)
 
+        target_normals = None
         if self.is_normal_loss:
             target_normals = data['pointcloud.normals'].to(device)
             normal_faces = data.get('angles.normal_face').to(device)
             normal_angles = data.get('angles.normal_angles').to(device)
+
+        if self.is_normal_loss_by_sgn_gradient or self.is_get_radius_direction_as_normals:
+            target_normals = data['pointcloud.normals'].to(device)
 
         kwargs = {}
         if self.add_pointcloud_occ and not self.is_sdf:
@@ -341,6 +359,8 @@ class Trainer(BaseTrainer):
                                           **kwargs)
 
         """
+        if self.is_get_radius_direction_as_normals:
+            angles.requires_grad = True
         scaled_coord = points * self.pnet_point_scale
         output = self.model(scaled_coord,
                             inputs,
@@ -382,6 +402,13 @@ class Trainer(BaseTrainer):
                 logits = torch.where(positive >= negative, positive, -negative)
             elif self.is_logits_by_softmax:
                 logits = (torch.softmax(sgn * 10, 1) * sgn).sum(1)
+            elif self.is_logits_by_steeper_last_sigmoid_slope:
+                logits = model_utils.convert_tsd_range_to_zero_to_one(
+                    sgn, scale=self.sgn_scale).sum(1) * 4.5
+            elif self.is_logits_by_relu_sum:
+                logits = torch.relu(sgn * self.sgn_scale).sum(1)
+            elif self.is_logits_by_max_with_scale:
+                logits = (sgn * self.sgn_scale).max(1)[0]
             else:
                 logits = model_utils.convert_tsd_range_to_zero_to_one(
                     sgn, scale=self.sgn_scale).sum(1)
@@ -399,13 +426,7 @@ class Trainer(BaseTrainer):
 
         scaled_target_point = pointcloud * self.pnet_point_scale
 
-        chamfer_loss, _ = custom_chamfer_loss.custom_chamfer_loss(
-            super_shape_point,
-            scaled_target_point,
-            surface_mask=(surface_mask if self.use_surface_mask else None),
-            prob=None,
-            pykeops=True,
-            apply_surface_mask_before_chamfer=self.is_strict_chamfer)
+        source_normals = None
 
         if self.is_normal_loss:
             """
@@ -439,6 +460,72 @@ class Trainer(BaseTrainer):
                 pykeops=True,
                 apply_surface_mask_before_chamfer=self.is_strict_chamfer)
 
+        if self.is_normal_loss_by_sgn_gradient:
+            nparts = super_shape_point.shape[1]
+            diag_idx = []
+            for i in range(nparts):
+                diag_idx.append(i + i * nparts)
+
+            sgn = sgn_BxNxNP.view(1, nparts**2, -1)[:, diag_idx, :]
+            uv_normals = -torch.autograd.grad(sgn.sum(),
+                                              super_shape_point,
+                                              retain_graph=True,
+                                              create_graph=True,
+                                              only_inputs=True)[0]
+            source_normals = uv_normals / torch.norm(
+                uv_normals, dim=-1, keepdim=True).clamp(min=1e-7)
+            target_normals = target_normals / torch.norm(
+                target_normals, dim=-1, keepdim=True).clamp(min=1e-7)
+
+        if self.is_get_radius_direction_as_normals:
+            nparts = super_shape_point.shape[1]
+            thetags = []
+            phigs = []
+            theta = angles[..., 0]
+            phi = angles[..., 1]
+            for idx in range(nparts):
+                r = radius[:, idx, :]
+                rg = torch.autograd.grad(r,
+                                         angles,
+                                         torch.ones_like(r),
+                                         retain_graph=True,
+                                         create_graph=True,
+                                         only_inputs=True)[0]
+                thetag = torch.stack([
+                    rg[..., 0] * theta.cos() * phi.cos() -
+                    theta.sin() * phi.cos() * r,
+                    rg[..., 0] * theta.sin() * phi.cos() +
+                    theta.cos() * phi.cos() * r, rg[..., 0] * phi.sin()
+                ],
+                                     axis=-1)
+                thetags.append(thetag)
+                phig = torch.stack([
+                    rg[..., 1] * theta.cos() * phi.cos() -
+                    theta.cos() * phi.sin() * r,
+                    rg[..., 1] * theta.sin() * phi.cos() -
+                    theta.sin() * phi.sin() * r,
+                    rg[..., 1] * phi.sin() + phi.cos() * r
+                ],
+                                   axis=-1)
+                phigs.append(phig)
+            thetags = torch.cat(thetags, axis=1)
+            phigs = torch.cat(phigs, axis=1)
+            uv_normals = torch.cross(thetags, phigs)
+            source_normals = uv_normals / torch.norm(
+                uv_normals, dim=-1, keepdim=True).clamp(min=1e-7)
+            target_normals = target_normals / torch.norm(
+                target_normals, dim=-1, keepdim=True).clamp(min=1e-7)
+
+        chamfer_loss, normal_loss = custom_chamfer_loss.custom_chamfer_loss(
+            super_shape_point,
+            scaled_target_point,
+            source_normals=source_normals,
+            target_normals=target_normals,
+            surface_mask=(surface_mask if self.use_surface_mask else None),
+            prob=None,
+            pykeops=True,
+            apply_surface_mask_before_chamfer=self.is_strict_chamfer)
+
         # regularizers
         overlap_reg = torch.relu(logits - self.overlap_reg_threshold).mean()
         batch, n_primitives, _ = sgn_BxNxNP.shape
@@ -463,7 +550,7 @@ class Trainer(BaseTrainer):
             print('cvx merged loss:', merged_loss.item())
             total_loss = total_loss + merged_loss
 
-        if self.is_normal_loss:
+        if self.is_normal_loss or self.is_normal_loss_by_sgn_gradient or self.is_get_radius_direction_as_normals:
             total_loss = total_loss + normal_loss * self.normal_loss_coef
 
         if self.is_radius_reg:
@@ -479,7 +566,7 @@ class Trainer(BaseTrainer):
             'overlap_reg': overlap_reg * self.overlap_reg_coef,
             'self_overlap_reg': self_overlap_reg * self.self_overlap_reg_coef
         }
-        if self.is_normal_loss:
+        if self.is_normal_loss or self.is_normal_loss_by_sgn_gradient or self.is_get_radius_direction_as_normals:
             losses.update({'normal_loss': normal_loss * self.normal_loss_coef})
         return losses
 

@@ -24,26 +24,24 @@ footer = """
 resource_base_dir_path = '/home/mil/kawana/workspace/occupancy_networks/paper_resources/shapenet_svr_comparison'
 csv_dir_path = os.path.join(resource_base_dir_path, 'csv')
 onet_new_fscore_table_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/onet_pretrained/pretrained/eval_fscore_from_meshes.csv'
-fscore_key = 'fscore_th=0.0107337006427915 (mesh)'
+fscore_key = 'fscore_th=0.01 (mesh)'
 id_to_dir_path_map = {
-    'Sphere30':
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_oceff10_dense_normal_loss_pointcloud_n_4096_20200414_051415',
-    'PSNet30':
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_target_n_4096_no_overlap_reg_20200413_015954'
+    #'Sphere30':
+    #'/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_oceff10_dense_normal_loss_pointcloud_n_4096_20200414_051415',
+    'SHNet':
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_no_normal_20200502_202018/generation_explicit_f60k_20200511_163104'
 }
-id_to_mesh_dir_name = {
-    'Sphere30': 'generation_explicit',
-    'PSNet30': 'generation_explicit'
-}
+
 id_to_fscore_map = {
-    'Sphere30': 'eval_fscore_from_meshes_explicit.csv',
-    'PSNet30': 'eval_fscore_from_meshes_explicit.csv'
+    #'Sphere30': 'eval_fscore_from_meshes_explicit.csv',
+    'SHNet':
+    'eval_fscore_from_meshes_mesh_iou_normalize__explicit_20200511_214918.csv'
 }
-id_to_cd1_map = {
-    'Sphere30': 'eval_meshes_explicit.csv',
-    'PSNet30': 'eval_meshes_explicit.csv'
+id_to_cd1_iou_map = {
+    #'Sphere30': 'eval_meshes_explicit.csv',
+    'SHNet': 'eval_meshes_mesh_iou_normalize__explicit_20200512_003806.csv'
 }
-ids = list(id_to_cd1_map.keys())
+ids = list(id_to_cd1_iou_map.keys())
 
 # %%
 ioudf = pd.read_csv(os.path.join(csv_dir_path, 'iou.csv'))
@@ -56,7 +54,7 @@ fdf = pd.read_csv(os.path.join(csv_dir_path, 'fscore.csv'))
 
 for idx in ids:
     s = pd.read_csv(
-        os.path.join(id_to_dir_path_map[idx], id_to_mesh_dir_name[idx],
+        os.path.join(id_to_dir_path_map[idx],
                      id_to_fscore_map[idx]))[fscore_key]
     s = s * 100
     new_data = {
@@ -68,8 +66,8 @@ for idx in ids:
 
 for idx in ids:
     s = pd.read_csv(
-        os.path.join(id_to_dir_path_map[idx], id_to_mesh_dir_name[idx],
-                     id_to_cd1_map[idx]))['chamfer-L1 (mesh)']
+        os.path.join(id_to_dir_path_map[idx],
+                     id_to_cd1_iou_map[idx]))['chamfer-L1 (mesh)']
     new_data = {
         key: value
         for key, value in
@@ -79,7 +77,9 @@ for idx in ids:
     cd1df = cd1df.append(new_data, ignore_index=True)
 
 for idx in ids:
-    s = pd.read_csv(os.path.join(id_to_dir_path_map[idx], 'eval.csv'))['iou']
+    s = pd.read_csv(
+        os.path.join(id_to_dir_path_map[idx],
+                     id_to_cd1_iou_map[idx]))['iou (mesh)']
     new_data = {
         key: value
         for key, value in
@@ -87,6 +87,31 @@ for idx in ids:
             [idx, *s.tolist(), s.mean().item()])
     }
     ioudf = ioudf.append(new_data, ignore_index=True)
+
+# %%
+
+
+def cutdeci(s, deci=3):
+    if isinstance(s, str):
+        return s
+    deci_str = "{" + ":.{}".format(deci) + "f}"
+    return deci_str.format(s)
+
+
+def bold_if_neccessary(els, df, dfidx, elsidx, is_max=True, deci=3):
+    try:
+        num = float(els)
+    except:
+        return els
+    strs = [cutdeci(s, deci=deci) for s in df.iloc[:, elsidx].tolist()]
+    floats = map(float, strs)
+    is_bold = (is_max and num == max(floats)) or (not is_max
+                                                  and num == min(floats))
+    if is_bold:
+        return '{\bf ' + els + '}'
+    else:
+        return els
+
 
 # %%
 body = ""
@@ -98,13 +123,12 @@ for idx in range(len(cd1df)):
     else:
         r1 = ""
 
-    def cutdeci(s):
-        if isinstance(s, str):
-            return s
-        return "{:.3f}".format(s)
-
-    els = [r1, *map(cutdeci, cd1df.loc[idx].tolist())]
-    row = ' & '.join(els) + " \\ "
+    els = map(cutdeci, cd1df.loc[idx].tolist())
+    row = r1
+    for elsidx, els in enumerate(els):
+        row += (' & ' +
+                bold_if_neccessary(els, cd1df, idx, elsidx, is_max=False))
+    row += " \\ "
     body += ('\n' + row)
 body += '\hline'
 
@@ -114,13 +138,13 @@ for idx in range(len(fdf)):
     else:
         r1 = ""
 
-    def cutdeci(s):
-        if isinstance(s, str):
-            return s
-        return "{:.2f}".format(s)
+    els = [cutdeci(s, deci=2) for s in fdf.loc[idx].tolist()]
+    row = r1
+    for elsidx, els in enumerate(els):
+        row += (' & ' +
+                bold_if_neccessary(els, fdf, idx, elsidx, is_max=True, deci=2))
+    row += " \\ "
 
-    els = [r1, *map(cutdeci, fdf.loc[idx].tolist())]
-    row = ' & '.join(els) + " \\ "
     body += ('\n' + row)
 body = body + '\hline'
 
@@ -130,17 +154,18 @@ for idx in range(len(ioudf)):
     else:
         r1 = ""
 
-    def cutdeci(s):
-        if isinstance(s, str):
-            return s
-        return "{:.3f}".format(s)
+    els = map(cutdeci, ioudf.loc[idx].tolist())
+    row = r1
+    for elsidx, els in enumerate(els):
+        row += (' & ' +
+                bold_if_neccessary(els, ioudf, idx, elsidx, is_max=True))
 
-    els = [r1, *map(cutdeci, ioudf.loc[idx].tolist())]
-    row = ' & '.join(els) + " \\ "
+    row += " \\ "
     body += '\n' + row
 
 with open(os.path.join(resource_base_dir_path, 'table.txt'), 'w') as f:
-    print(body.replace('\\', '\\\\').replace('\\\h',
-                                             '\h').replace('\\\mu', '\mu'),
+    print(body.replace('\\', '\\\\').replace('\\\h', '\h').replace(
+        '\b', '\\b').replace('\\\mu', '\mu'),
           file=f)
 
+# %%

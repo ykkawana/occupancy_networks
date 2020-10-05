@@ -266,19 +266,34 @@ class PointCloudField(Field):
                  file_name,
                  transform=None,
                  cfg=None,
-                 with_transforms=False):
+                 with_transforms=False,
+                 force_disable_atlasnetv2_mode=False,
+                 force_disable_bspnet_mode=False):
         self.file_name = file_name
         self.transform = transform
         self.with_transforms = with_transforms
         self.cfg = cfg
+        self.force_disable_bspnet_mode = force_disable_bspnet_mode
+        self.force_disable_atlasnetv2_mode = force_disable_atlasnetv2_mode
 
         self.is_bspnet = False
-        if cfg is not None and self.cfg['method'] == 'bspnet':
+        if cfg is not None and self.cfg[
+                'method'] == 'bspnet' and not self.force_disable_bspnet_mode:
+
             self.is_bspnet = True
             assert 'bspnet' in self.cfg['data']
             bspnet_config = self.cfg['data']['bspnet']
             assert bspnet_config['path'].startswith('data')
             assert 'pointcloud_file' in bspnet_config
+
+        self.is_atlasnetv2 = False
+        if cfg is not None and self.cfg[
+                'method'] == 'atlasnetv2' and not self.force_disable_atlasnetv2_mode and 'atlasnetv2' in cfg[
+                    'data']:
+
+            self.is_atlasnetv2 = True
+            atlasnetv2_config = self.cfg['data']['atlasnetv2']
+            assert atlasnetv2_config['path'].startswith('data')
 
     def load(self, model_path, idx, category):
         ''' Loads the data point.
@@ -308,6 +323,25 @@ class PointCloudField(Field):
                 trimesh.load(
                     os.path.join(bsp_model_path, self.cfg['data']['bspnet']
                                  ['pointcloud_file'])).vertices)
+
+        if self.is_atlasnetv2:
+            modelname = model_path.split('/')[-1]
+            model_path = model_path.replace(modelname, '').replace(
+                self.cfg['data']['path'],
+                self.cfg['data']['atlasnetv2']['path'])
+
+            if 'pointcloud_file' in self.cfg['data']['atlasnetv2']:
+                data['atlasnetv2_points'] = torch.from_numpy(
+                    np.load(
+                        os.path.join(
+                            model_path, modelname,
+                            self.cfg['data']['atlasnetv2']['pointcloud_file']))
+                    ['points']).float()
+            else:
+                data['atlasnetv2_points'] = torch.from_numpy(
+                    trimesh.load(
+                        os.path.join(model_path, 'ply', modelname +
+                                     '.points.ply')).vertices).float()
 
         if self.with_transforms and 'loc' in data and 'scale' in data:
             data['loc'] = pointcloud_dict['loc'].astype(np.float32)

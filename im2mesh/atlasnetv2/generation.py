@@ -9,6 +9,7 @@ from im2mesh.common import make_3d_grid
 from im2mesh.utils.libsimplify import simplify_mesh
 from im2mesh.utils.libmise import MISE
 from periodic_shapes.models import model_utils
+from bspnet import utils as bsp_utils
 import time
 
 
@@ -46,6 +47,8 @@ class Generator3D(object):
                  preprocessor=None,
                  point_scale=1,
                  debugged=False,
+                 is_fit_to_gt_loc_scale=False,
+                 training_step=None,
                  **kwargs):
         self.model = model.to(device)
         self.points_batch_size = points_batch_size
@@ -61,6 +64,8 @@ class Generator3D(object):
         self.preprocessor = preprocessor
         self.point_scale = point_scale
         self.debugged = debugged
+        self.is_fit_to_gt_loc_scale = is_fit_to_gt_loc_scale
+        self.training_step = training_step
 
     def generate_mesh(self, data, return_stats=True):
         ''' Generates the output mesh.
@@ -73,8 +78,12 @@ class Generator3D(object):
         device = self.device
         stats_dict = {}
 
-        inputs = data.get('inputs', torch.empty(
-            1, 0)).to(device) * (1 if self.debugged else self.point_scale)
+        if self.training_step == 'autoencoder':
+            inputs = data.get('pointcloud', torch.empty(
+                1, 0)).to(device) * self.point_scale
+        else:
+            inputs = data.get('inputs', torch.empty(
+                1, 0)).to(device) * (1 if self.debugged else self.point_scale)
         kwargs = {}
 
         # Preprocess if requires
@@ -87,7 +96,10 @@ class Generator3D(object):
         # Encode inputs
         t0 = time.time()
         with torch.no_grad():
-            c = self.model.encode_inputs(inputs)
+            if self.training_step == 'autoencoder':
+                c = self.model.encode_pointcloud_inputs(inputs)
+            else:
+                c = self.model.encode_inputs(inputs)
         stats_dict['time (encode inputs)'] = time.time() - t0
 
         z = self.model.get_z_from_prior((1, ), sample=self.sample).to(device)
@@ -130,7 +142,16 @@ class Generator3D(object):
         faces_all = torch.cat([(faces + idx * P) for idx in range(N)], axis=1)
         assert B == 1
         mem_t = time.time()
-        npverts = predicted_vertices.view(N * P, D).to('cpu').detach().numpy()
+        npverts = predicted_vertices.view(1, N * P, D)
+
+        if self.is_fit_to_gt_loc_scale:
+            pointcloud = data.get('pointcloud').to(self.device).float()
+            npverts = bsp_utils.realign(npverts,
+                                        npverts.clone().detach(),
+                                        pointcloud,
+                                        adjust_bbox=True)
+
+        npverts = npverts.view(N * P, D).to('cpu').detach().numpy()
         npfaces = faces_all.view(-1, 3).to('cpu').detach().numpy()
         skip_t = time.time() - mem_t
 

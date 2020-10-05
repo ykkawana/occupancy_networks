@@ -29,6 +29,8 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
     decoder_kwargs['return_sdf'] = cfg['trainer'].get('is_sdf', False)
     decoder_kwargs['is_radius_reg'] = cfg['trainer'].get(
         'is_radius_reg', False)
+    decoder_kwargs['is_get_radius_direction_as_normals'] = cfg['trainer'].get(
+        'is_get_radius_direction_as_normals', False)
 
     decoder = models.decoder_dict[decoder](dim=dim,
                                            z_dim=z_dim,
@@ -106,6 +108,12 @@ def get_generator(model, cfg, device, **kwargs):
         preprocessor=preprocessor,
         pnet_point_scale=cfg['trainer']['pnet_point_scale'],
         is_explicit_mesh=cfg['generation'].get('is_explicit_mesh', False),
+        is_skip_surface_mask_generation_time=cfg['generation'].get(
+            'is_skip_surface_mask_generation_time', False),
+        is_just_measuring_time=cfg['generation'].get('is_just_measuring_time',
+                                                     False),
+        is_fit_to_gt_loc_scale=cfg['generation'].get('is_fit_to_gt_loc_scale',
+                                                     False),
         **cfg['generation'].get('mesh_kwargs', {}),
     )
     return generator
@@ -145,7 +153,8 @@ def get_data_fields(mode, cfg):
         unpackbits=cfg['data']['points_unpackbits'],
     )
 
-    if not cfg.get('sdf_generation', False):
+    if not cfg.get('sdf_generation', False) and cfg['trainer'].get(
+            'is_sdf', False):
         sdf_points_transform = data.SubsampleSDFPoints(
             cfg['data']['points_subsample'])
         fields['sdf_points'] = data.SDFPointsField(

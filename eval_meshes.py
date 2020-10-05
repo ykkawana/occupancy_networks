@@ -93,14 +93,22 @@ yaml.dump(
 evaluator = MeshEvaluator(
     n_points=cfg['test']['n_points'],
     is_sample_from_surface=cfg['test']['is_sample_from_surface'],
-    is_normalize_by_side_length=cfg['test']['is_normalize_by_side_length'])
+    is_normalize_by_side_length=cfg['test']['is_normalize_by_side_length'],
+    is_eval_iou_by_split=cfg['test'].get('is_eval_iou_by_split', False))
 
 # Loader
 test_loader = torch.utils.data.DataLoader(dataset,
                                           batch_size=1,
                                           num_workers=0,
                                           shuffle=False)
-
+vertex_attribute_filename = 'vertex_attributes'
+if cfg['test'].get('eval_from_vertex_attributes', False):
+    vertex_attribute_filename = cfg['test']['vertex_attribute_filename']
+    cfg['method'] = 'bspnet'
+if cfg['method'] == 'bspnet' and cfg['generation'].get('is_gen_implicit_mesh',
+                                                       False):
+    is_eval_explicit_mesh = False
+    cfg['method'] = 'onet'
 # Evaluate all classes
 eval_dicts = []
 print('Evaluating meshes...')
@@ -155,7 +163,7 @@ for it, data in enumerate(tqdm(test_loader)):
 
     # Evaluate mesh
     if cfg['test']['eval_mesh']:
-
+        mesh_for_iou = None
         vertex_visibility = None
         if cfg['method'] == 'pnet':
             mesh_file = os.path.join(mesh_dir, '%s.off' % modelname)
@@ -176,19 +184,30 @@ for it, data in enumerate(tqdm(test_loader)):
                           visbility_file)
                     continue
         elif cfg['method'] == 'bspnet':
-            vertex_file = os.path.join(mesh_dir,
-                                       '%s_vertex_attributes.npz' % modelname)
+            vertex_file = os.path.join(
+                mesh_dir, '%s_%s.npz' % (modelname, vertex_attribute_filename))
             is_eval_explicit_mesh = True
             if os.path.exists(vertex_file):
                 try:
                     vertex_attributes = np.load(vertex_file)
-                    mesh = trimesh.Trimesh(
-                        vertex_attributes['vertices'],
-                        vertex_normals=vertex_attributes['normals'])
+                    verts = vertex_attributes['vertices']
+                    trargs = [verts]
+                    try:
+                        normals = vertex_attributes['normals']
+                        trargs.append(normals)
+                    except:
+                        pass
+                    mesh = trimesh.Trimesh(*trargs)
+                    mesh_for_iou = trimesh.load(
+                        os.path.join(mesh_dir, '{}.off'.format(modelname)))
+                    assert isinstance(mesh_for_iou, trimesh.Trimesh)
                 except:
                     print('Error in bspnet loading vertex')
                     continue
-                vertex_visibility = vertex_attributes['vertex_visibility']
+                try:
+                    vertex_visibility = vertex_attributes['vertex_visibility']
+                except:
+                    vertex_visibility = None
             else:
                 print('Warning: vertex file does not exist: %s' % vertex_file)
                 continue
@@ -216,6 +235,7 @@ for it, data in enumerate(tqdm(test_loader)):
             normals_tgt,
             points_tgt,
             occ_tgt,
+            mesh_for_iou=mesh_for_iou,
             is_eval_explicit_mesh=is_eval_explicit_mesh,
             vertex_visibility=vertex_visibility,
             skip_iou=(cfg['method'] == 'atlasnetv2'))

@@ -32,6 +32,7 @@ training:
   learning_rage_decay_at:
     - 250
     - 300
+  wandb_resume: ho0ih4zl
 trainer:
   point_scale: 2
 test:

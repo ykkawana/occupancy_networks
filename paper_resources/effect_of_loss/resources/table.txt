@@ -1,0 +1,8 @@
+&implicit&explicit&F-score \\ \hline 
+SHNet${}_O$ & \checkmark &  & 23.93 \\ 
+SHNet${}_C$ &  & \checkmark & 45.84 \\ 
+SHNet${}_S$ & \checkmark & \checkmark & 50.52 \\ 
+\hline 
+AtlasNetV2 &  & \checkmark & 40.05 \\ 
+BSPNet & \checkmark &  & 46.17 \\ 
+

@@ -24,17 +24,19 @@ class Trainer(BaseTrainer):
         eval_sample (bool): whether to evaluate samples
 
     '''
-    def __init__(self,
-                 model,
-                 optimizer,
-                 device=None,
-                 input_type='img',
-                 vis_dir=None,
-                 threshold=0.5,
-                 point_scale=1,
-                 is_pykeops_loss=True,
-                 debugged=False,
-                 eval_sample=False):
+    def __init__(
+        self,
+        model,
+        optimizer,
+        device=None,
+        input_type='img',
+        vis_dir=None,
+        threshold=0.5,
+        point_scale=1,
+        is_pykeops_loss=True,
+        debugged=False,
+        training_step=None,  # if training_step == None, then directry training model wiht svr. Otherwise 'autoencoder' or 'svr'
+        eval_sample=False):
         self.model = model
         self.optimizer = optimizer
         self.device = device
@@ -45,6 +47,7 @@ class Trainer(BaseTrainer):
         self.point_scale = point_scale
         self.is_pykeops_loss = is_pykeops_loss
         self.debugged = debugged
+        self.training_step = training_step
 
         self.distChamferL2 = dist_chamfer.chamferDist()
 
@@ -73,13 +76,25 @@ class Trainer(BaseTrainer):
         self.model.eval()
 
         device = self.device
-        pointcloud = data.get('pointcloud').to(device) * self.point_scale
+        if 'pointcloud.atlasnetv2_points' in data:
+            pointcloud = data.get('pointcloud.atlasnetv2_points').to(
+                device) * self.point_scale
+        else:
+            pointcloud = data.get('pointcloud').to(device) * self.point_scale
+
         patch = data.get('patch').to(device)
         inputs = data.get('inputs', torch.empty(
             pointcloud.size(0),
             0)).to(device) * (1 if self.debugged else self.point_scale)
         assert self.debugged
-        feature = self.model.encode_inputs(inputs)
+
+        if inputs.ndim == 3:  #pointcloud
+            inputs = inputs * self.point_scale
+
+        if self.training_step == 'autoencoder':
+            feature = self.model.encode_pointcloud_inputs(pointcloud)
+        else:
+            feature = self.model.encode_inputs(inputs)
 
         eval_dict = {}
         kwargs = {}
@@ -106,13 +121,21 @@ class Trainer(BaseTrainer):
         '''
         device = self.device
 
-        pointcloud = data.get('pointcloud').to(device) * self.point_scale
+        if 'pointcloud.atlasnetv2_points' in data:
+            pointcloud = data.get('pointcloud.atlasnetv2_points').to(
+                device) * self.point_scale
+        else:
+            pointcloud = data.get('pointcloud').to(device) * self.point_scale
+
         patch = data.get('patch').to(device)
         inputs = data.get('inputs', torch.empty(
             pointcloud.size(0),
             0)).to(device) * (1 if self.debugged else self.point_scale)
 
-        feature = self.model.encode_inputs(inputs)
+        if self.training_step == 'autoencoder':
+            feature = self.model.encode_pointcloud_inputs(pointcloud)
+        else:
+            feature = self.model.encode_inputs(inputs)
 
         eval_dict = {}
         kwargs = {}
@@ -153,8 +176,14 @@ class Trainer(BaseTrainer):
         Args:
             data (dict): data dictionary
         '''
+        assert self.debugged
         device = self.device
-        pointcloud = data.get('pointcloud').to(device) * self.point_scale
+        if 'pointcloud.atlasnetv2_points' in data:
+            pointcloud = data.get('pointcloud.atlasnetv2_points').to(
+                device) * self.point_scale
+        else:
+            pointcloud = data.get('pointcloud').to(device) * self.point_scale
+
         patch = data.get('patch').to(device)
         inputs = data.get('inputs', torch.empty(
             pointcloud.size(0),
@@ -163,22 +192,29 @@ class Trainer(BaseTrainer):
         kwargs = {}
 
         feature = self.model.encode_inputs(inputs)
+        if self.training_step in ['autoencoder', 'svr']:
+            pointcloud_feature = self.model.encode_pointcloud_inputs(
+                pointcloud)
 
         # General points
-        coords = self.model.decode(pointcloud,
-                                   None,
-                                   feature,
-                                   grid=patch,
-                                   **kwargs)
-        B, N, P, dims = coords.shape
-
-        if self.is_pykeops_loss:
-            loss = atv2_utils.chamfer_loss(coords.view(B, N * P, dims),
-                                           pointcloud)
+        if self.train_step == 'svr':
+            loss = torch.mean((feature - pointcloud_feature.detach())**2)
         else:
-            dist1, dist2 = self.distChamferL2(coords.view(B, N * P, dims),
-                                              pointcloud)
-            loss = torch.mean(dist1) + torch.mean(dist2)
+            coords = self.model.decode(
+                pointcloud,
+                None,
+                feature if self.training_step is None else pointcloud_feature,
+                grid=patch,
+                **kwargs)
+            B, N, P, dims = coords.shape
+
+            if self.is_pykeops_loss:
+                loss = atv2_utils.chamfer_loss(coords.view(B, N * P, dims),
+                                               pointcloud)
+            else:
+                dist1, dist2 = self.distChamferL2(coords.view(B, N * P, dims),
+                                                  pointcloud)
+                loss = torch.mean(dist1) + torch.mean(dist2)
 
         losses = {'total_loss': loss}
         return losses

@@ -1,0 +1,125 @@
+# AtlasNetV2_3: 
+#     base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn3_20200503_220859
+#     fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn3_20200503_220859/generation_explicit__20200503_221815/eval_fscore_from_meshes_full_normalize__explicit_20200504_041630.pkl
+#     part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn3_20200503_220859/eval_part_assignment_20200505_040957.pkl
+# AtlasNetV2_6:
+#     base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn6_20200503_220859
+#     fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn6_20200503_220859/generation_explicit__20200503_221852/eval_fscore_from_meshes_full_normalize__explicit_20200504_132727.pkl
+#     part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn6_20200503_220859/eval_part_assignment_20200505_040957.pkl
+# AtlasNetV2_8:
+#     base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn8_20200503_222342
+#     fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn8_20200503_222342/generation_explicit__20200503_222907/eval_fscore_from_meshes_full_normalize__explicit_20200504_042122.pkl
+#     part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn8_20200503_222342/eval_part_assignment_20200505_040956.pkl
+AtlasNetV2_10: 
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn10_20200503_220859
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn10_20200503_220859/generation_explicit_f60k_20200511_185029/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200511_203336.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn10_20200503_220859/eval_part_assignment_20200512_032717.pkl
+AtlasNetV2_15:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn15_20200503_221008
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn15_20200503_221008/generation_explicit_f60k_20200511_185155/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200511_203336.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn15_20200503_221008/eval_part_assignment_20200512_032717.pkl
+AtlasNetV2_20:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn20_20200503_220954
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn20_20200503_220954/generation_explicit_f60k_20200511_185541/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200511_203336.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn20_20200503_220954/eval_part_assignment_20200512_032717.pkl
+AtlasNetV2_30:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn30_20200503_221032
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn30_20200503_221032/generation_explicit_f60k_20200511_155838/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200511_165205.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn30_20200503_221032/eval_part_assignment_20200511_223140.pkl
+AtlasNetV2_50:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn50_20200503_221053
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn50_20200503_221053/generation_explicit_f60k_20200511_185755/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200511_210415.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn50_20200503_221053/eval_part_assignment_20200512_032717.pkl
+
+# BSPNet_3:
+#     base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn3_20200501_191343
+#     fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn3_20200501_191343/generation__20200502_034218/eval_fscore_from_meshes_full_normalize__20200504_040438.pkl
+#     part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn3_20200501_191343/eval_part_assignment_20200505_040957.pkl
+# BSPNet_6: 
+#     base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn6_20200501_191325
+#     fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn6_20200501_191325/generation__20200502_033947/eval_fscore_from_meshes_full_normalize__20200504_040607.pkl
+#     part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn6_20200501_191325/eval_part_assignment_20200505_040957.pkl
+# BSPNet_8:
+#     base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn8_20200502_134305
+#     fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn8_20200502_134305/generation__20200502_140431/eval_fscore_from_meshes_full_normalize__20200504_041027.pkl
+#     part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn8_20200502_134305/eval_part_assignment_20200505_040956.pkl
+BSPNet_10:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn10_20200501_191222
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn10_20200501_191222/generation_surface_points_20200603_211556/eval_fscore_from_meshes_full_mesh_iou_normalize__20200604_024411.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn10_20200501_191222/eval_part_assignment_20200505_040956.pkl
+    config_path: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn10_20200501_191222/config.yaml
+BSPNet_15:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn15_20200504_012215
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn15_20200504_012215/generation_surface_points_20200603_211416/eval_fscore_from_meshes_full_mesh_iou_normalize__20200604_024618.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn15_20200504_012215/eval_part_assignment_20200505_040957.pkl
+BSPNet_20:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn20_20200502_133608
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn20_20200502_133608/generation_surface_points_20200603_211518/eval_fscore_from_meshes_full_mesh_iou_normalize__20200604_024551.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn20_20200502_133608/eval_part_assignment_20200505_040957.pkl
+    config_path: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn20_20200502_133608/eval_config_20200502_133608.yaml
+BSPNet_30:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn30_20200501_191145
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn30_20200501_191145/generation_surface_points_20200603_211101/eval_fscore_from_meshes_full_mesh_iou_normalize__20200604_032818.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn30_20200501_191145/eval_part_assignment_20200505_013428.pkl
+    config_path: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn30_20200501_191145/config.yaml
+BSPNet_50:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn50_20200504_013233
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn50_20200504_013233/generation_surface_points_20200603_211139/eval_fscore_from_meshes_full_mesh_iou_normalize__20200604_033516.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn50_20200504_013233/eval_part_assignment_20200505_040956.pkl
+BSPNet_256:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn256_author_provided_20200501_184850/generation_primitive_wise_watertight_20200507_023808
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn256_author_provided_20200501_184850/generation_surface_points_20200603_210756/eval_fscore_from_meshes_full_mesh_iou_normalize__20200604_114444.pkl
+    config_path: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn256_author_provided_20200501_184850/config.yaml
+    mesh_path_for_vis: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn256_author_provided_20200501_184850/generation_primitive_wise_watertight_20200507_023808
+
+# SHNet_3:
+#     base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn3_target_n_4096_no_overlap_reg_20200502_042724
+#     fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn3_target_n_4096_no_overlap_reg_20200502_042724/generation_explicit__20200502_144107/eval_fscore_from_meshes_full_normalize__explicit_20200504_043149.pkl
+#     part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn3_target_n_4096_no_overlap_reg_20200502_042724/eval_part_assignment_20200505_040957.pkl
+# SHNet_6:
+#     base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn6_target_n_4096_no_overlap_reg_20200502_042856
+#     fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn6_target_n_4096_no_overlap_reg_20200502_042856/generation_explicit__20200502_144128/eval_fscore_from_meshes_full_normalize__explicit_20200504_043220.pkl
+#     part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn6_target_n_4096_no_overlap_reg_20200502_042856/eval_part_assignment_20200505_040956.pkl
+# SHNet_8:
+#     base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn8_target_n_4096_no_overlap_reg_20200502_042147
+#     fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn8_target_n_4096_no_overlap_reg_20200502_042147/generation_explicit__20200502_144309/eval_fscore_from_meshes_full_normalize__explicit_20200504_043315.pkl
+#     part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn8_target_n_4096_no_overlap_reg_20200502_042147/eval_part_assignment_20200505_040957.pkl
+SHNet_10:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_20200502_001739
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_20200502_001739/generation_explicit_f60k_20200511_190709/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200512_024243.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_20200502_001739/eval_part_assignment_20200512_032717.pkl
+    config_path: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_20200502_001739/eval_config_20200502_105908.yaml
+    vis_fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_20200502_001739/generation_explicit_20200502_003123/eval_fscore_from_meshes_full_normalize__explicit_20200504_043406.pkl
+SHNet_15:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn15_20200504_012215
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn15_target_n_4096_no_overlap_reg_20200502_041907/generation_explicit_f60k_20200511_190844/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200512_024243.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn15_target_n_4096_no_overlap_reg_20200502_041907/eval_part_assignment_20200512_032717.pkl
+SHNet_20:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn20_target_n_4096_no_overlap_reg2_20200502_043525
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn20_target_n_4096_no_overlap_reg2_20200502_043525/generation_explicit_f60k_20200511_190903/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200512_030052.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn20_target_n_4096_no_overlap_reg2_20200502_043525/eval_part_assignment_20200512_032717.pkl
+SHNet_30:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_no_normal_20200502_202018
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_no_normal_20200502_202018/generation_explicit_f60k_20200511_163104/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200511_214918.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_no_normal_20200502_202018/eval_part_assignment_20200512_032717.pkl
+    config_path: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_no_normal_20200502_202018/eval_config_20200502_172135.yaml
+SHNet_50:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn50_target_n_4096_no_overlap_reg_20200502_041227
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn50_target_n_4096_no_overlap_reg_20200502_041227/generation_explicit_f60k_20200511_190925/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200512_032848.pkl
+    part_semseg: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn50_target_n_4096_no_overlap_reg_20200502_041227/eval_part_assignment_20200512_032717.pkl
+
+SHNet_10_occupancy_loss:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_cceff0_20200502_202829
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_cceff0_20200502_202829/generation_explicit_f60k_20200511_191434/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200512_024243.pkl
+
+SHNet_10_chamfer_loss:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_oceff0_no_surface_loss_20200502_202538
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_oceff0_no_surface_loss_20200502_202538/generation_explicit_f60k_20200511_191447/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200512_024243.pkl
+
+SHNet_10_surface_loss:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_cceff0_20200502_202829
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_oceff0_20200502_203001/generation_explicit_f60k_20200511_191411/eval_fscore_from_meshes_full_mesh_iou_normalize__explicit_20200512_024243.pkl
+
+OccNet:
+    base_eval_dir: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/onet_pretrained_20200502_013054
+    fscore: /home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/onet_pretrained_20200502_013054/pretrained__20200502_013403/eval_fscore_from_meshes_full_normalize__20200505_040209.pkl

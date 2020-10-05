@@ -120,9 +120,9 @@ class AtlasNetV2PointNet(nn.Module):
         dim (int): input points dimension
         hidden_dim (int): hidden dimension of the network
     '''
-    def __init__(self, c_dim=2500, dim=3, hidden_dim=1024):
+    def __init__(self, npoint=2500, dim=3, nlatent=1024):
         super().__init__()
-        self.pointnet = PointNetfeat(npoint=c_dim, nlatent=hidden_dim)
+        self.pointnet = PointNetfeat(npoint=npoint, nlatent=nlatent)
 
     def forward(self, x):
         x = x.transpose(2, 1).contiguous()

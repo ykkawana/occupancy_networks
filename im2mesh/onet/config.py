@@ -26,33 +26,30 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
     encoder_kwargs = cfg['model']['encoder_kwargs']
     encoder_latent_kwargs = cfg['model']['encoder_latent_kwargs']
 
-    decoder = models.decoder_dict[decoder](
-        dim=dim, z_dim=z_dim, c_dim=c_dim,
-        **decoder_kwargs
-    )
+    decoder = models.decoder_dict[decoder](dim=dim,
+                                           z_dim=z_dim,
+                                           c_dim=c_dim,
+                                           **decoder_kwargs)
 
     if z_dim != 0:
         encoder_latent = models.encoder_latent_dict[encoder_latent](
-            dim=dim, z_dim=z_dim, c_dim=c_dim,
-            **encoder_latent_kwargs
-        )
+            dim=dim, z_dim=z_dim, c_dim=c_dim, **encoder_latent_kwargs)
     else:
         encoder_latent = None
 
     if encoder == 'idx':
         encoder = nn.Embedding(len(dataset), c_dim)
     elif encoder is not None:
-        encoder = encoder_dict[encoder](
-            c_dim=c_dim,
-            **encoder_kwargs
-        )
+        encoder = encoder_dict[encoder](c_dim=c_dim, **encoder_kwargs)
     else:
         encoder = None
 
     p0_z = get_prior_z(cfg, device)
-    model = models.OccupancyNetwork(
-        decoder, encoder, encoder_latent, p0_z, device=device
-    )
+    model = models.OccupancyNetwork(decoder,
+                                    encoder,
+                                    encoder_latent,
+                                    p0_z,
+                                    device=device)
 
     return model
 
@@ -72,9 +69,12 @@ def get_trainer(model, optimizer, cfg, device, **kwargs):
     input_type = cfg['data']['input_type']
 
     trainer = training.Trainer(
-        model, optimizer,
-        device=device, input_type=input_type,
-        vis_dir=vis_dir, threshold=threshold,
+        model,
+        optimizer,
+        device=device,
+        input_type=input_type,
+        vis_dir=vis_dir,
+        threshold=threshold,
         eval_sample=cfg['training']['eval_sample'],
     )
 
@@ -100,6 +100,8 @@ def get_generator(model, cfg, device, **kwargs):
         sample=cfg['generation']['use_sampling'],
         refinement_step=cfg['generation']['refinement_step'],
         simplify_nfaces=cfg['generation']['simplify_nfaces'],
+        is_fit_to_gt_loc_scale=cfg['generation'].get('is_fit_to_gt_loc_scale',
+                                                     False),
         preprocessor=preprocessor,
     )
     return generator
@@ -113,10 +115,8 @@ def get_prior_z(cfg, device, **kwargs):
         device (device): pytorch device
     '''
     z_dim = cfg['model']['z_dim']
-    p0_z = dist.Normal(
-        torch.zeros(z_dim, device=device),
-        torch.ones(z_dim, device=device)
-    )
+    p0_z = dist.Normal(torch.zeros(z_dim, device=device),
+                       torch.ones(z_dim, device=device))
 
     return p0_z
 
@@ -133,10 +133,21 @@ def get_data_fields(mode, cfg):
 
     fields = {}
     fields['points'] = data.PointsField(
-        cfg['data']['points_file'], points_transform,
+        cfg['data']['points_file'],
+        points_transform,
         with_transforms=with_transforms,
         unpackbits=cfg['data']['points_unpackbits'],
     )
+
+    if cfg['generation'].get('is_fit_to_gt_loc_scale', False):
+        pointcloud_transform = data.SubsamplePointcloud(
+            cfg['data']['pointcloud_target_n'])
+
+        fields['pointcloud'] = data.PointCloudField(
+            cfg['data']['pointcloud_file'],
+            pointcloud_transform,
+            cfg,
+            with_transforms=True)
 
     if mode in ('val', 'test'):
         points_iou_file = cfg['data']['points_iou_file']

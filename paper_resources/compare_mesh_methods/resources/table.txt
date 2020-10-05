@@ -1,0 +1,9 @@
+&$\\#$V&$\\#$F&F-score&time\\ \hline 
+NSDN ico0 & 2 & 5 & 34.02 & 0.012 \\ 
+NSDN ico2 & 30 & 88 & 42.87 & 0.013 \\ 
+NSDN ico4 & 478 & 1414 & 55.66 & 0.017 \\ 
+MISE up0 & 12 & 31 & 26.46 & 0.051 \\ 
+MISE up1 & 54 & 143 & 40.37 & 0.635 \\ 
+MISE up2 & 220 & 592 & 50.28 & 5.438 \\ 
+textcolor[gray]{0.5}{BSPNet }&textcolor[gray]{0.5}{ 10 }&textcolor[gray]{0.5}{ 18 }&textcolor[gray]{0.5}{ 47.44 }&textcolor[gray]{0.5}{ 0.014 \\ 
+}

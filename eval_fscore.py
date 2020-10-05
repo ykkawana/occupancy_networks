@@ -104,6 +104,15 @@ test_loader = torch.utils.data.DataLoader(dataset,
                                           num_workers=0,
                                           shuffle=False)
 
+vertex_attribute_filename = 'vertex_attributes'
+if cfg['test'].get('eval_from_vertex_attributes', False):
+    vertex_attribute_filename = cfg['test']['vertex_attribute_filename']
+    cfg['method'] = 'bspnet'
+
+if cfg['method'] == 'bspnet' and cfg['generation'].get('is_gen_implicit_mesh',
+                                                       False):
+    is_eval_explicit_mesh = False
+    cfg['method'] = 'onet'
 # Evaluate all classes
 eval_dicts = []
 print('Evaluating meshes...')
@@ -178,8 +187,8 @@ for it, data in enumerate(tqdm(test_loader)):
                           visbility_file)
                     continue
         elif cfg['method'] == 'bspnet':
-            vertex_file = os.path.join(mesh_dir,
-                                       '%s_vertex_attributes.npz' % modelname)
+            vertex_file = os.path.join(
+                mesh_dir, '%s_%s.npz' % (modelname, vertex_attribute_filename))
             is_eval_explicit_mesh = True
             if os.path.exists(vertex_file):
                 try:
@@ -188,13 +197,17 @@ for it, data in enumerate(tqdm(test_loader)):
                 except:
                     print('Error in bspnet loading vertex')
                     continue
-                vertex_visibility = vertex_attributes['vertex_visibility']
+                try:
+                    vertex_visibility = vertex_attributes['vertex_visibility']
+                except:
+                    vertex_visibility = None
             else:
                 print('Warning: vertex file does not exist: %s' % vertex_file)
                 continue
         elif cfg['method'] == 'atlasnetv2':
             mesh_file = os.path.join(mesh_dir, '%s.off' % modelname)
 
+            is_eval_explicit_mesh = False
             if os.path.exists(mesh_file):
                 mesh = trimesh.load(mesh_file, process=False)
             else:

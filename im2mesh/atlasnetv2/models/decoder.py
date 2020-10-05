@@ -27,6 +27,8 @@ class AtlasNetV2Decoder(nn.Module):
                  c_dim=128,
                  hidden_size=128,
                  leaky=False,
+                 author_original_implementation=False,
+                 model='PatchDeformMLPAdjInOcc',
                  **decoder_kwargs):
         super().__init__()
         self.z_dim = z_dim
@@ -34,7 +36,10 @@ class AtlasNetV2Decoder(nn.Module):
         decoder_kwargs['nlatent'] = hidden_size
         self.options = type('', (), decoder_kwargs)
         #self.decoder = PatchDeformGroupWiseMLPAdjInOcc(self.options)
-        self.decoder = PatchDeformMLPAdjInOcc(self.options)
+        self.decoder = MODEL_DICT[model](
+            self.options,
+            author_original_implementation=author_original_implementation)
+        self.author_original_implementation = author_original_implementation
 
     def forward(self, p, z, color_feature, grid=None, **kwargs):
         # grid (B, P, dim) -> (B, dim, P)
@@ -48,7 +53,7 @@ class AtlasNetV2Decoder(nn.Module):
 
 class PatchDeformMLPAdjInOcc(nn.Module):
     """Atlas net auto encoder"""
-    def __init__(self, options):
+    def __init__(self, options, author_original_implementation=False):
 
         super(PatchDeformMLPAdjInOcc, self).__init__()
 
@@ -57,6 +62,7 @@ class PatchDeformMLPAdjInOcc(nn.Module):
         self.patchDim = options.patchDim
         assert self.patchDim == 2
         self.patchDeformDim = options.patchDeformDim
+        self.author_original_implementation = author_original_implementation
 
         #encoder decoder and patch deformation module
         #==============================================================================
@@ -76,7 +82,8 @@ class PatchDeformMLPAdjInOcc(nn.Module):
         #==============================================================================
         #x = self.encoder(x.transpose(2, 1).contiguous())
         #==============================================================================
-
+        if self.training and self.author_original_implementation:
+            grid.uniform_(0, 1)
         outs = []
         patches = []
         for i in range(0, self.npatch):
@@ -234,3 +241,69 @@ class GroupWisemlpAdj(nn.Module):
         x = F.relu(self.bn3(self.conv3(x).view(B, -1, P))).view(B, N, -1, P)
         x = self.th(self.conv4(x).view(B, -1, P)).view(B, N, -1, P)
         return x
+
+
+class AtlasNetOcc(nn.Module):
+    """Atlas net auto encoder"""
+    def __init__(self, options, author_original_implementation=False):
+
+        super(AtlasNetOcc, self).__init__()
+
+        self.npatch = options.npatch
+        self.nlatent = options.nlatent
+        self.patchDim = options.patchDim
+        self.author_original_implementation = author_original_implementation
+
+        #encoder and decoder modules
+        #==============================================================================
+        self.decoder = nn.ModuleList(
+            [mlpAdj(nlatent=2 + self.nlatent) for i in range(0, self.npatch)])
+        #==============================================================================
+
+    def forward(self, x, grid):
+
+        #encoder
+        #==============================================================================
+        #x = self.encoder(x.transpose(2, 1).contiguous())
+        #==============================================================================
+
+        outs = []
+        patches = []
+        if self.training and self.author_original_implementation:
+            grid.uniform_(0, 1)
+        for i in range(0, self.npatch):
+
+            #random patch
+            #==========================================================================
+            """
+            rand_grid = torch.FloatTensor(x.size(0), self.patchDim,
+                                          self.npoint // self.npatch).cuda()
+            """
+            rand_grid = grid
+
+            #random planar patch
+            #==========================================================================
+            """
+            rand_grid = torch.FloatTensor(x.size(0), self.patchDim,
+                                          self.npoint // self.npatch).cuda()
+            rand_grid.data.uniform_(0, 1)
+            """
+            rand_grid[:, 2:, :] = 0
+            patches.append(rand_grid[0].transpose(1, 0))
+            #==========================================================================
+
+            #cat with latent vector and decode
+            #==========================================================================
+            y = x.unsqueeze(2).expand(x.size(0), x.size(1),
+                                      rand_grid.size(2)).contiguous()
+            y = torch.cat((rand_grid, y), 1).contiguous()
+            outs.append(self.decoder[i](y))
+            #==========================================================================
+
+        return torch.cat(outs, 2).transpose(2, 1).contiguous(), patches
+
+
+MODEL_DICT = {
+    'PatchDeformMLPAdjInOcc': PatchDeformMLPAdjInOcc,
+    'AtlasNetOcc': AtlasNetOcc
+}

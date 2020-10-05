@@ -62,12 +62,12 @@ test:
   eval_pointcloud: true
   eval_fscore: true
   fscore_thresholds:
-  - 0.005053668503213957
-  - 0.0107337006427915 # as bbox's side length is slightly bigger as normalization happens before meshing.
-  - 0.02021467401285583
-  - 0.050536685032139574
-  - 0.10107337006427915
-  - 0.2021467401285583
+  - 0.005
+  - 0.01
+  - 0.02
+  - 0.05
+  - 0.1
+  - 0.2
   model_file: model_best.pt
   n_points: 100000
   is_sample_from_surface: false

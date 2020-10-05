@@ -25,7 +25,13 @@ from im2mesh.utils.io import export_pointcloud
 from im2mesh.utils.visualize import visualize_data
 import eval_utils
 from tqdm import tqdm
+import yaml
+import pickle
+from bspnet import utils as bsp_utils
+from bspnet import modelSVR
+from datetime import datetime
 os.chdir('/home/mil/kawana/workspace/occupancy_networks')
+os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 
 
 # %%
@@ -40,21 +46,39 @@ def separate_mesh_and_color(mesh_color_list):
 shapenetv1_path = '/data/unagi0/kawana/workspace/ShapeNetCore.v1'
 shapenetv2_path = '/data/unagi0/kawana/workspace/ShapeNetCore.v2'
 shapenetocc_path = '/home/mil/kawana/workspace/occupancy_networks/data/ShapeNet'
-side_length_scale = 0.0107337006427915
+side_length_scale = 0.01
 
-topk = 50
+topk = 100  # good chair
 colormap_name = 'jet'
-class_names = ['airplane', 'chair']
-primitive_id_map = {'airplane': [0, 15, 29], 'chair': [0, 15, 29]}
-base_eval_dir = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_target_n_4096_no_overlap_reg_20200413_015954'
+primitive_id_map = {
+    'airplane': [2, 3, 4, 6],
+    'chair': [3, 5, 6],
+    'bench': [3, 5, 6],
+    'car': [3, 4, 6],
+    'vessel': [3, 4, 6],
+    'telephone': [3, 4, 6],
+    'table': [3, 5, 6],
+    'rifle': [1, 2, 3, 6],
+}
+#primitive_id_map = {key: list(range(10)) for key in primitive_id_map}
+class_names = list(primitive_id_map.keys())
+#primitive_id_map = {'airplane': list(range(10)), 'chair': list(range(10))}
+
+models_config_path = '/home/mil/kawana/workspace/occupancy_networks/paper_resources/model_configs.yaml'
+configs = yaml.load(open(models_config_path, 'r'))
+attrs = configs['SHNet_10']
+
+base_eval_dir = attrs['base_eval_dir']
+fscore_pkl_path = attrs['vis_fscore']
+config_path = attrs['config_path']
+
 rendering_script_path = '/home/mil/kawana/workspace/occupancy_networks/scripts/render_3dobj.sh'
 rendering_out_base_dir = '/home/mil/kawana/workspace/occupancy_networks/paper_resources/primitive_visualization'
-rendering_out_dir = os.path.join(rendering_out_base_dir, 'resources')
+date_str = datetime.now().strftime(('%Y%m%d_%H%M%S'))
+rendering_out_dir = os.path.join(rendering_out_base_dir,
+                                 'resources_{}'.format(date_str))
 camera_param_path = os.path.join(rendering_out_base_dir, 'camera_param.txt')
 mesh_dir_path = os.path.join(base_eval_dir, 'generation_explicit')
-fscore_pkl_path = os.path.join(mesh_dir_path,
-                               'eval_fscore_from_meshes_full_explicit.pkl')
-config_path = os.path.join(base_eval_dir, 'config.yaml')
 
 # %%
 synset_to_label = {
@@ -75,6 +99,8 @@ synset_to_label = {
 label_to_synset = {v: k for k, v in synset_to_label.items()}
 
 # %%
+if not os.path.exists(rendering_out_dir):
+    os.makedirs(rendering_out_dir)
 cfg = config.load_config(config_path, 'configs/default.yaml')
 cfg['data']['classes'] = [label_to_synset[label] for label in class_names]
 cfg['data']['is_normal_icosahedron'] = True
@@ -140,6 +166,7 @@ for idx in range(len(dataset)):
     if (class_id, model_id) in samples_to_render:
         indices.append(idx)
 # %%
+"""
 # TODO: for loop here
 for idx in indices:
     data = dataset[idx]
@@ -201,7 +228,7 @@ for idx in indices:
 
     filename_template = '{class_name}_{model_id}_{type}_{id}'
     with tempfile.TemporaryDirectory() as dname:
-        dname = '/home/mil/kawana/workspace/occupancy_networks/paper_resources/primitive_visualization/cache'
+        #dname = '/home/mil/kawana/workspace/occupancy_networks/paper_resources/primitive_visualization/cache'
 
         model_name = 'colored_mesh'
         model_path = os.path.join(dname, '{}.obj'.format(model_name))
@@ -255,4 +282,158 @@ for idx in indices:
                                              type=model_name,
                                              id=pidx),
                                          skip_reconvert=True)
+"""
+# %%
+# Model
+configs = yaml.load(open(models_config_path, 'r'))
+attrs = configs[
+    'BSPNet_30']  # airplane becomes almost same number of n primitives
+attrs = configs[
+    'BSPNet_30']  # airplane becomes almost same number of n primitives
+attrs = configs[
+    'BSPNet_256']  # airplane becomes almost same number of n primitives
+
+cfg = yaml.load(open(attrs['config_path']))
+
+# Dataset
+dataset = config.get_dataset('test', cfg, return_idx=True)
+
+model = config.get_model(cfg, device=device, dataset=dataset)
+
+checkpoint_io = CheckpointIO(base_eval_dir, model=model)
+checkpoint_io.load(cfg['test']['model_file'])
+
+# Loader
+test_loader = torch.utils.data.DataLoader(dataset,
+                                          batch_size=1,
+                                          num_workers=4,
+                                          shuffle=False)
+# Generate
+model.eval()
+indices = []
+for idx in range(len(dataset)):
+    model_dict = dataset.get_model_dict(idx)
+    model_id = model_dict['model']
+    class_id = model_dict.get('category', 'n/a')
+    if (class_id, model_id) in samples_to_render:
+        indices.append(idx)
+
+gen_helper = modelSVR.BSPNetMeshGenerator(model, device=device)
+# %%
+for idx in indices:
+    data = dataset[idx]
+    model_dict = dataset.get_model_dict(idx)
+    model_id = model_dict['model']
+    class_id = model_dict.get('category', 'n/a')
+    class_name = synset_to_label[class_id]
+
+    inputs = data.get('inputs', torch.empty(1, 0)).to(device).unsqueeze(0)
+
+    occ_pointcloud = torch.from_numpy(
+        data.get('pointcloud')).to(device).unsqueeze(0)
+
+    imnet_pointcloud = data.get('pointcloud.imnet_points').to(
+        device).float().unsqueeze(0)
+    imnet_pointcloud = gen_helper.roty90(imnet_pointcloud, inv=True)
+
+    kwargs = {}
+    # Encode inputs
+    with torch.no_grad():
+        out_m, t = gen_helper.encode(inputs, measure_time=True)
+
+        model_float, t = gen_helper.eval_points(out_m, measure_time=True)
+
+        mesh, t = gen_helper.gen_primitive_wise_watertight_mesh(
+            model_float, out_m, measure_time=True)
+
+        verts = torch.from_numpy(mesh.vertices).float().to(device).unsqueeze(0)
+    verts = gen_helper.roty90(verts, inv=True)
+    verts = bsp_utils.realign(verts, imnet_pointcloud, occ_pointcloud)
+    verts = verts[0].cpu().numpy()
+
+    primitive_verts_for_rendering = eval_utils.normalize_verts_in_occ_way(
+        verts)
+    mesh.vertices = primitive_verts_for_rendering
+
+    meshes = mesh.split()
+    nparts = len(meshes)
+    bspnet_primitive_id_map = {
+        key: list(range(nparts))
+        for key in primitive_id_map
+    }
+    cm = plt.get_cmap(colormap_name, nparts)
+    # normed to 0 - 1
+    rgbas = [np.array(cm(idx)) for idx in range(nparts)]
+
+    colors = []
+    colors_emphasis = []
+    for pidx, rgba in enumerate(rgbas):
+
+        colors.append(rgba)
+        if pidx in bspnet_primitive_id_map[synset_to_label[class_id]]:
+            rgba_tr = rgba
+        else:
+            rgba_tr = [0.5, 0.5, 0.5, 0.2]
+        colors_emphasis.append(rgba_tr)
+
+    filename_template = 'bspnet_{class_name}_{model_id}_{type}_{id}'
+    with tempfile.TemporaryDirectory() as dname:
+        #dname = '/home/mil/kawana/workspace/occupancy_networks/paper_resources/primitive_visualization/cache'
+
+        model_name = 'colored_mesh'
+        model_path = os.path.join(dname, '{}.obj'.format(model_name))
+
+        eval_utils.export_colored_mesh(meshes, colors, model_path)
+
+        eval_utils.render_by_blender(rendering_script_path,
+                                     camera_param_path,
+                                     model_path,
+                                     rendering_out_dir,
+                                     filename_template.format(
+                                         class_name=class_name,
+                                         model_id=model_id,
+                                         type=model_name,
+                                         id=0),
+                                     skip_reconvert=True,
+                                     use_cycles=True)
+
+        model_name = 'emphasis_mesh'
+        model_path = os.path.join(dname, '{}.obj'.format(model_name))
+
+        eval_utils.export_colored_mesh(meshes, colors_emphasis, model_path)
+
+        eval_utils.render_by_blender(rendering_script_path,
+                                     camera_param_path,
+                                     model_path,
+                                     rendering_out_dir,
+                                     filename_template.format(
+                                         class_name=class_name,
+                                         model_id=model_id,
+                                         type=model_name,
+                                         id=0),
+                                     skip_reconvert=True,
+                                     use_cycles=True)
+        for pidx, (mesh, color) in enumerate(zip(meshes, colors)):
+            print('color', color)
+            if not pidx in bspnet_primitive_id_map[synset_to_label[class_id]]:
+                continue
+            model_name = 'colored_primitive_mesh'
+            model_path = os.path.join(dname, '{}.obj'.format(model_name))
+
+            mesh.vertices = eval_utils.normalize_verts_in_occ_way(
+                mesh.vertices)
+
+            eval_utils.export_colored_mesh([mesh], [color], model_path)
+
+            eval_utils.render_by_blender(rendering_script_path,
+                                         camera_param_path,
+                                         model_path,
+                                         rendering_out_dir,
+                                         filename_template.format(
+                                             class_name=class_name,
+                                             model_id=model_id,
+                                             type=model_name,
+                                             id=pidx),
+                                         skip_reconvert=True,
+                                         use_cycles=True)
 # %%

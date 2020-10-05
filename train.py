@@ -20,6 +20,9 @@ os.environ['WANDB_PROJECT'] = 'periodic_shape_occupancy_networks'
 parser = argparse.ArgumentParser(
     description='Train a 3D reconstruction model.')
 parser.add_argument('config', type=str, help='Path to config file.')
+parser.add_argument('--use_written_out_dir',
+                    action='store_true',
+                    help='Path to config file.')
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
 parser.add_argument('--data_parallel',
                     action='store_true',
@@ -41,8 +44,11 @@ t0 = time.time()
 
 # Shorthands
 #out_dir = cfg['training']['out_dir']
-out_dir = os.path.join('out', cfg['data']['input_type'],
-                       os.path.basename(args.config).split('.')[0])
+if args.use_written_out_dir:
+    out_dir = cfg['training']['out_dir']
+else:
+    out_dir = os.path.join('out', cfg['data']['input_type'],
+                           os.path.basename(args.config).split('.')[0])
 cfg['training']['out_dir'] = out_dir
 batch_size = cfg['training']['batch_size']
 backup_every = cfg['training']['backup_every']
@@ -165,9 +171,21 @@ nparameters = sum(p.numel() for p in model.parameters())
 wandb.watch(model)
 print('Total number of parameters: %d' % nparameters)
 
+is_linear_decay = 'learning_rage_decay_at' in cfg['training']
+current_lr = learning_rate
+kill_epoch = cfg['training'].get('kill_epoch_at', np.inf)
 while True:
     epoch_it += 1
+
     #     scheduler.step()
+    if is_linear_decay and epoch_it in cfg['training'][
+            'learning_rage_decay_at']:
+        print('Decay learning rate from {} to {}'.format(
+            current_lr, current_lr / 10))
+        current_lr /= 10
+        optimizer = torch.optim.Adam(model.parameters(), lr=current_lr)
+        checkpoint_io.module_dict['optimizer'] = optimizer
+        trainer.optimizer = optimizer
 
     for batch in train_loader:
         it += 1
@@ -225,7 +243,8 @@ while True:
                                    loss_val_best=metric_val_best)
 
         # Exit if necessary
-        if exit_after > 0 and (time.time() - t0) >= exit_after:
+        if exit_after > 0 and (time.time() -
+                               t0) >= exit_after or kill_epoch < epoch_it:
             print('Time limit reached. Exiting.')
             checkpoint_io.save('model.pt',
                                epoch_it=epoch_it,

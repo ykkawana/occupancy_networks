@@ -19,6 +19,7 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
     '''
     decoder = cfg['model']['decoder']
     encoder = cfg['model']['encoder']
+    encoder_pointcloud = cfg['model'].get('encoder_pointcloud', None)
     encoder_latent = cfg['model']['encoder_latent']
     dim = cfg['data']['dim']
     z_dim = cfg['model']['z_dim']
@@ -42,6 +43,11 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
         encoder = nn.Embedding(len(dataset), c_dim)
     elif encoder is not None:
         encoder = encoder_dict[encoder](c_dim=c_dim, **encoder_kwargs)
+        if encoder_pointcloud is not None:
+            encoder_pointcloud = encoder_dict[encoder_pointcloud](
+                npoint=cfg['data']['pointcloud_target_n'],
+                nlatent=c_dim,
+                **encoder_kwargs)
     else:
         encoder = None
 
@@ -49,9 +55,13 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
     model = models.AtlasNetV2(decoder,
                               encoder,
                               encoder_latent,
+                              encoder_pointcloud,
                               p0_z,
                               device=device)
-    if cfg['data']['input_type'] == 'pointcloud':
+    if cfg['data'][
+            'input_type'] == 'pointcloud' or encoder_pointcloud is not None and cfg[
+                'training'].get('atlasnetv2', {}).get('training_step',
+                                                      None) == 'autoencoder':
         model.apply(weights_init)
     return model
 
@@ -78,6 +88,9 @@ def get_trainer(model, optimizer, cfg, device, **kwargs):
                                threshold=threshold,
                                eval_sample=cfg['training']['eval_sample'],
                                debugged=cfg['training'].get('debugged', False),
+                               training_step=cfg['training'].get(
+                                   'atlasnetv2',
+                                   {}).get('training_step', None),
                                **cfg['trainer'])
 
     return trainer
@@ -104,6 +117,10 @@ def get_generator(model, cfg, device, **kwargs):
         simplify_nfaces=cfg['generation']['simplify_nfaces'],
         preprocessor=preprocessor,
         debugged=cfg['training'].get('debugged', False),
+        is_fit_to_gt_loc_scale=cfg['generation'].get('is_fit_to_gt_loc_scale',
+                                                     False),
+        training_step=cfg['training'].get('atlasnetv2',
+                                          {}).get('training_step', None),
         point_scale=cfg['trainer']['point_scale'])
     return generator
 
@@ -155,6 +172,7 @@ def get_data_fields(mode, cfg):
 
     fields['pointcloud'] = data.PointCloudField(cfg['data']['pointcloud_file'],
                                                 pointcloud_transform,
+                                                cfg=cfg,
                                                 with_transforms=True)
 
     if mode in ('val', 'test'):

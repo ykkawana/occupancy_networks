@@ -1,0 +1,58 @@
+method: atlasnetv2
+data:
+  path: data/ShapeNet
+  img_folder: img_choy2016
+  img_size: 224 
+  pointcloud_target_n: 4096
+  patch_side_length: 20 # will be powered by dim - 1, if dim == 3, then 900
+  is_generate_mesh: false
+  train_split: train
+  val_split: test
+  test_split: test 
+  img_folder: img_choy2016
+  classes:
+    - "02691156"
+  atlasnetv2:
+    path: data/ShapeNetAtlasNetV2
+model:
+  encoder_latent: null
+  decoder: atlasnetv2decoder 
+  encoder_pointcloud: pointnet_atlasnetv2
+  encoder: resnet18
+  c_dim: 1024
+  z_dim: 0
+  decoder_kwargs:
+    npatch: 10
+    patchDim: 2
+    patchDeformDim: 3
+    hidden_size: 1024
+    author_original_implementation: true
+training:
+  out_dir:  out/img/atlasnetv2_autoencoder_then_svr_author_data
+  batch_size: 16
+  val_batch_size: 2
+  model_selection_metric: cd1
+  model_selection_mode: minimize
+  visualize_every: 1000
+  validate_every: 2500
+  checkpoint_every: 100000
+  skip_load_pretrained_optimizer: true
+  debugged: true
+  learning_rate: 1e-3
+  atlasnetv2:
+    training_step: svr # autoencoder or svr
+trainer:
+  point_scale: 1
+  is_pykeops_loss: true
+test:
+  threshold: 0.5
+  eval_mesh: true
+  eval_pointcloud: false
+generation:
+  batch_size: 100000
+  refine: false
+  n_x: 128
+  n_z: 1
+  resolution_0: 32 
+  upsampling_steps: 2
+

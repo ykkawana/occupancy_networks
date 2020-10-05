@@ -32,29 +32,16 @@ config_paths = [
 script = 'generate_part_label.py'
 
 config_paths = [
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn3_20200501_191343/part_assignment_20200505_025509.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn6_20200501_191325/part_assignment_20200505_025549.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn8_20200502_134305/part_assignment_20200505_025607.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn10_20200501_191222/part_assignment_20200505_025630.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn15_20200504_012215/part_assignment_20200505_025652.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn20_20200502_133608/part_assignment_20200505_025712.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn50_20200504_013233/part_assignment_20200505_025731.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn3_target_n_4096_no_overlap_reg_20200502_042724/part_assignment_20200505_025835.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn6_target_n_4096_no_overlap_reg_20200502_042856/part_assignment_20200505_025848.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn8_target_n_4096_no_overlap_reg_20200502_042147/part_assignment_20200505_025907.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_20200502_001739/part_assignment_20200505_025922.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn15_target_n_4096_no_overlap_reg_20200502_041907/part_assignment_20200505_025938.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn20_target_n_4096_no_overlap_reg2_20200502_043525/part_assignment_20200505_025956.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_20200502_104902/part_assignment_20200505_030037.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_no_normal_20200502_202018/part_assignment_20200505_030058.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn50_target_n_4096_no_overlap_reg_20200502_041227/part_assignment_20200505_030119.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn3_20200503_220859/part_assignment_20200505_034110.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn6_20200503_220859/part_assignment_20200505_034110.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn8_20200503_222342/part_assignment_20200505_034108.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn10_20200503_220859/part_assignment_20200505_034110.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn15_20200503_221008/part_assignment_20200505_034110.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn20_20200503_220954/part_assignment_20200505_034110.yaml',
-    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn50_20200503_221053/part_assignment_20200505_034110.yaml'
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_20200502_001739/part_assignment_20200512_015430.yaml',
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn15_target_n_4096_no_overlap_reg_20200502_041907/part_assignment_20200512_015529.yaml',
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn20_target_n_4096_no_overlap_reg2_20200502_043525/part_assignment_20200512_015600.yaml',
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_no_normal_20200502_202018/part_assignment_20200512_015609.yaml',
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn50_target_n_4096_no_overlap_reg_20200502_041227/part_assignment_20200512_015617.yaml',
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn10_20200503_220859/part_assignment_20200512_013017.yaml',
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn15_20200503_221008/part_assignment_20200512_013304.yaml',
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn20_20200503_220954/part_assignment_20200512_025123.yaml',
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn50_20200503_221053/part_assignment_20200512_013307.yaml',
+    '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn50_20200503_221053/part_assignment_20200512_013307.yaml',
 ]
 script = 'eval_part_label.py'
 

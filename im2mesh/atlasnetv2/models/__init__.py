@@ -26,6 +26,7 @@ class AtlasNetV2(nn.Module):
                  decoder,
                  encoder=None,
                  encoder_latent=None,
+                 encoder_pointcloud=None,
                  p0_z=None,
                  device=None):
         super().__init__()
@@ -43,6 +44,10 @@ class AtlasNetV2(nn.Module):
             self.encoder = encoder.to(device)
         else:
             self.encoder = None
+        if encoder_pointcloud is not None:
+            self.encoder_pointcloud = encoder_pointcloud.to(device)
+        else:
+            self.encoder_pointcloud = None
 
         self._device = device
         self.p0_z = p0_z
@@ -89,6 +94,21 @@ class AtlasNetV2(nn.Module):
 
         if self.encoder is not None:
             c = self.encoder(inputs)
+        else:
+            # Return inputs?
+            c = torch.empty(inputs.size(0), 0)
+
+        return c
+
+    def encode_pointcloud_inputs(self, inputs):
+        ''' Encodes the input.
+
+        Args:
+            input (tensor): the input
+        '''
+
+        if self.encoder is not None:
+            c = self.encoder_pointcloud(inputs)
         else:
             # Return inputs?
             c = torch.empty(inputs.size(0), 0)

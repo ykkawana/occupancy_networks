@@ -79,6 +79,7 @@ config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval
 config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn30_20200501_191145/part_assignment_20200505_014749.yaml'
 config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn30_20200503_221032/debug_part_assignment_20200505_030654.yaml'
 config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn30_20200503_221032/part_assignment_20200505_031557.yaml'
+config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_20200502_104902/part_assignment_mesh_400_points_20200505_223546.yaml'
 if len(sys.argv) > 1:
     config_path = sys.argv[1]
 base_eval_dir = os.path.dirname(config_path)

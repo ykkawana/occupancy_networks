@@ -81,6 +81,26 @@ def get_generator(model, cfg, device, **kwargs):
         sample=cfg['generation']['use_sampling'],
         refinement_step=cfg['generation']['refinement_step'],
         simplify_nfaces=cfg['generation']['simplify_nfaces'],
+        is_gen_primitive_wise_watertight_mesh=cfg['generation'].get(
+            'is_gen_primitive_wise_watertight_mesh', False),
+        is_gen_primitive_wise_watertight_mesh_debugged=cfg['generation'].get(
+            'is_gen_primitive_wise_watertight_mesh_debugged', False),
+        is_gen_whole_mesh=cfg['generation'].get('is_gen_whole_mesh', False),
+        is_gen_skip_vertex_attributes=cfg['generation'].get(
+            'is_gen_skip_vertex_attributes', False),
+        is_gen_watertight_mesh=cfg['generation'].get('is_gen_integrated_mesh',
+                                                     False),
+        is_gen_implicit_mesh=cfg['generation'].get('is_gen_implicit_mesh',
+                                                   False),
+        is_gen_surface_points=cfg['generation'].get('is_gen_surface_points',
+                                                    False),
+        is_just_measuring_time=cfg['generation'].get('is_just_measuring_time',
+                                                     False),
+        is_skip_realign=cfg['generation'].get('bspnet', {
+            'is_skip_realign': False
+        }).get('is_skip_realign', False),
+        is_fit_to_gt_loc_scale=cfg['generation'].get('is_fit_to_gt_loc_scale',
+                                                     False),
         preprocessor=preprocessor)
     return generator
 
@@ -121,10 +141,13 @@ def get_data_fields(mode, cfg):
     if cfg.get('sdf_generation', False):
         pointcloud_transform = None
 
-    fields['pointcloud'] = data.PointCloudField(cfg['data']['pointcloud_file'],
-                                                pointcloud_transform,
-                                                cfg,
-                                                with_transforms=True)
+    fields['pointcloud'] = data.PointCloudField(
+        cfg['data']['pointcloud_file'],
+        pointcloud_transform,
+        cfg,
+        with_transforms=True,
+        force_disable_bspnet_mode=cfg['data']['bspnet'].get(
+            'force_disable_bspnet_mode', False))
     if cfg['test'].get('is_eval_semseg', False):
         fields['labeled_pointcloud'] = data.PartLabeledPointCloudField(
             cfg['data']['semseg_pointcloud_file'], cfg)

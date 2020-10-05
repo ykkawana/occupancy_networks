@@ -1,6 +1,7 @@
 /output
 /out
 /data
+wandb
 build
 .vscode
 .pytest_cache

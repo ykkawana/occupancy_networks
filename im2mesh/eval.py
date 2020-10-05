@@ -39,13 +39,17 @@ class MeshEvaluator(object):
     Args:
         n_points (int): number of points to be used for evaluation
     '''
-    def __init__(self,
-                 n_points=100000,
-                 is_sample_from_surface=False,
-                 is_normalize_by_side_length=False):
+    def __init__(
+        self,
+        n_points=100000,
+        is_sample_from_surface=False,
+        is_normalize_by_side_length=False,
+        is_eval_iou_by_split=False,
+    ):
         self.n_points = n_points
         self.is_sample_from_surface = is_sample_from_surface
         self.is_normalize_by_side_length = is_normalize_by_side_length
+        self.is_eval_iou_by_split = is_eval_iou_by_split
 
     def eval_mesh(self,
                   mesh,
@@ -55,6 +59,7 @@ class MeshEvaluator(object):
                   occ_tgt,
                   is_eval_explicit_mesh=False,
                   vertex_visibility=None,
+                  mesh_for_iou=None,
                   skip_iou=False):
         ''' Evaluates a mesh.
 
@@ -118,13 +123,28 @@ class MeshEvaluator(object):
         #print('eval point cloud', time.time() - t0)
 
         t0 = time.time()
-        if len(mesh.vertices) != 0 and len(
-                mesh.faces) != 0 and not skip_iou and False:
-            occ = check_mesh_contains(mesh, points_iou)
+        if mesh_for_iou is None:
+            mesh_for_iou = mesh
+        if len(mesh_for_iou.vertices) != 0 and len(
+                mesh_for_iou.faces) != 0 and not skip_iou:
+            if self.is_eval_iou_by_split:
+                meshes = mesh_for_iou.split()
+            else:
+                meshes = [mesh_for_iou]
+
+            if len(meshes) != 0:
+                for idx, mesh in enumerate(meshes):
+                    if idx == 0:
+                        occ = check_mesh_contains(mesh, points_iou)
+                    else:
+                        occ |= check_mesh_contains(mesh, points_iou)
+            else:
+                occ = check_mesh_contains(mesh_for_iou, points_iou)
+
             out_dict['iou'] = compute_iou(occ, occ_tgt)
         else:
             out_dict['iou'] = 0.
-        #print('iou', time.time() - t0)
+        print('iou', time.time() - t0)
 
         #print("eval_mesh", time.time() - t0)
         return out_dict

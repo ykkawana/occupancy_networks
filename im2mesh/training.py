@@ -7,16 +7,21 @@ from tqdm import tqdm
 class BaseTrainer(object):
     ''' Base trainer class.
     '''
-
-    def evaluate(self, val_loader):
+    def evaluate(self, val_loader, batch=None):
         ''' Performs an evaluation.
         Args:
             val_loader (dataloader): pytorch dataloader
         '''
         eval_list = defaultdict(list)
 
-        for data in tqdm(val_loader):
-            eval_step_dict = self.eval_step(data)
+        if val_loader:
+            for data in tqdm(val_loader):
+                eval_step_dict = self.eval_step(data)
+
+                for k, v in eval_step_dict.items():
+                    eval_list[k].append(v)
+        else:
+            eval_step_dict = self.eval_step(batch)
 
             for k, v in eval_step_dict.items():
                 eval_list[k].append(v)

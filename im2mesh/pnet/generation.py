@@ -9,6 +9,7 @@ from im2mesh.common import make_3d_grid
 from im2mesh.utils.libsimplify import simplify_mesh
 from im2mesh.utils.libmise import MISE
 from periodic_shapes.models import model_utils
+from bspnet import utils as bsp_utils
 import time
 
 
@@ -46,6 +47,9 @@ class Generator3D(object):
                  preprocessor=None,
                  pnet_point_scale=6,
                  is_explicit_mesh=False,
+                 is_skip_surface_mask_generation_time=False,
+                 is_just_measuring_time=False,
+                 is_fit_to_gt_loc_scale=False,
                  **kwargs):
         self.model = model.to(device)
         self.points_batch_size = points_batch_size
@@ -61,6 +65,9 @@ class Generator3D(object):
         self.preprocessor = preprocessor
         self.pnet_point_scale = pnet_point_scale
         self.is_explicit_mesh = is_explicit_mesh
+        self.is_skip_surface_mask_generation_time = is_skip_surface_mask_generation_time
+        self.is_just_measuring_time = is_just_measuring_time
+        self.is_fit_to_gt_loc_scale = is_fit_to_gt_loc_scale
 
     def generate_mesh(self, data, return_stats=True):
         ''' Generates the output mesh.
@@ -119,14 +126,26 @@ class Generator3D(object):
         if self.is_explicit_mesh:
             normal_faces = data.get('angles.normal_face').to(self.device)
             normal_angles = data.get('angles.normal_angles').to(self.device)
+
+            if self.is_skip_surface_mask_generation_time:
+                t0 = time.time()
+                output = self.model.decode(None,
+                                           z,
+                                           c,
+                                           angles=normal_angles,
+                                           only_return_points=True,
+                                           **kwargs)
+                stats_dict['time (eval points)'] = time.time() - t0
             t0 = time.time()
-            output = self.model.decode(None,
-                                       z,
-                                       c,
-                                       angles=normal_angles,
-                                       **kwargs)
+            if not self.is_just_measuring_time:
+                output = self.model.decode(None,
+                                           z,
+                                           c,
+                                           angles=normal_angles,
+                                           **kwargs)
+            if not self.is_skip_surface_mask_generation_time:
+                stats_dict['time (eval points)'] = time.time() - t0
             normal_vertices, normal_mask, _, _, _ = output
-            stats_dict['time (eval points)'] = time.time() - t0
 
             t0 = time.time()
             B, N, P, D = normal_vertices.shape
@@ -135,11 +154,25 @@ class Generator3D(object):
                                          axis=1)
             assert B == 1
             mem_t = time.time()
+            if self.is_fit_to_gt_loc_scale:
+                pointcloud = data.get('pointcloud').to(self.device).float()
+                normal_vertices = normal_vertices.view(B, N * P, D)
+                normal_vertices = bsp_utils.realign(
+                    normal_vertices,
+                    normal_vertices.clone().detach(),
+                    pointcloud,
+                    adjust_bbox=True)
+                normal_vertices = normal_vertices.view(B, N, P, D)
+
             verts = normal_vertices.view(
                 N * P, D).to('cpu').detach().numpy() / self.pnet_point_scale
+
             faces = normal_faces_all.view(-1, 3).to('cpu').detach().numpy()
-            visbility = (normal_mask > 0.5).view(N *
-                                                 P).to('cpu').detach().numpy()
+            if self.is_just_measuring_time:
+                visbility = None
+            else:
+                visbility = (normal_mask > 0.5).view(
+                    N * P).to('cpu').detach().numpy()
             skip_t = time.time() - mem_t
 
             mesh = trimesh.Trimesh(

@@ -26,6 +26,7 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
                  is_feature_radius=True,
                  no_last_bias=False,
                  return_sdf=False,
+                 is_simpler_sgn=False,
                  is_infer_r1r2=False,
                  **kwargs):
         super().__init__(*args, **kwargs)
@@ -36,7 +37,7 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
                            )  # Only infer r2 for 3D
         self.theta_dim = 2 if self.dim == 2 else 4
         self.last_scale = last_scale
-
+        self.is_simpler_sgn = is_simpler_sgn
         self.act = act
         self.no_encoder = no_encoder
         self.is_shape_sampler_sphere = is_shape_sampler_sphere
@@ -250,12 +251,15 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
                     r1 = r1.clamp(min=EPS)
                 else:
                     r1 = nn.functional.relu(r1) + EPS
-            if self.clamp:
-                denominator = ((r1**2) * (r2**2) * (phi.cos()**2) + (r2**2) *
-                               (phi.sin()**2)).clamp(min=EPS)
+            if self.is_simpler_sgn:
+                denominator = r2
             else:
-                denominator = ((r1**2) * (r2**2) * (phi.cos()**2) + (r2**2) *
-                               (phi.sin()**2)) + EPS
+                if self.clamp:
+                    denominator = ((r1**2) * (r2**2) * (phi.cos()**2) +
+                                   (r2**2) * (phi.sin()**2)).clamp(min=EPS)
+                else:
+                    denominator = ((r1**2) * (r2**2) * (phi.cos()**2) +
+                                   (r2**2) * (phi.sin()**2)) + EPS
             if self.return_sdf:
                 if self.clamp:
                     nep = numerator.clamp(min=EPS)
@@ -263,6 +267,14 @@ class PeriodicShapeSampler(sphere_sampler.SphereSampler):
                     nep = (numerator + EPS)
                 dist = nep.sqrt() - denominator.sqrt()
                 indicator = (dist).sign() * dist**2
+                denominator = r2
+            elif self.is_simpler_sgn:
+                if self.clamp:
+                    indicator = 1. - numerator.clamp(
+                        min=EPS).sqrt() / denominator
+
+                else:
+                    indicator = 1. - (numerator + EPS).sqrt() / denominator
             else:
                 if self.clamp:
                     indicator = 1. - (numerator /

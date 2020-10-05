@@ -91,6 +91,9 @@ class Shapes3dDataset(data.Dataset):
             elif cfg is not None and 'bspnet' in cfg['data']:
                 subpath = subpath.replace(cfg['data']['path'],
                                           cfg['data']['bspnet']['path'])
+            elif cfg is not None and 'atlasnetv2' in cfg['data']:
+                subpath = subpath.replace(cfg['data']['path'],
+                                          cfg['data']['atlasnetv2']['path'])
             split_file = os.path.join(subpath, split + '.lst')
             with open(split_file, 'r') as f:
                 models_c = f.read().split('\n')

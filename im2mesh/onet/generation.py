@@ -8,6 +8,7 @@ from im2mesh.utils import libmcubes
 from im2mesh.common import make_3d_grid
 from im2mesh.utils.libsimplify import simplify_mesh
 from im2mesh.utils.libmise import MISE
+from bspnet import utils as bsp_utils
 import time
 
 
@@ -30,12 +31,19 @@ class Generator3D(object):
         simplify_nfaces (int): number of faces the mesh should be simplified to
         preprocessor (nn.Module): preprocessor for inputs
     '''
-
-    def __init__(self, model, points_batch_size=100000,
-                 threshold=0.5, refinement_step=0, device=None,
-                 resolution0=16, upsampling_steps=3,
-                 with_normals=False, padding=0.1, sample=False,
+    def __init__(self,
+                 model,
+                 points_batch_size=100000,
+                 threshold=0.5,
+                 refinement_step=0,
+                 device=None,
+                 resolution0=16,
+                 upsampling_steps=3,
+                 with_normals=False,
+                 padding=0.1,
+                 sample=False,
                  simplify_nfaces=None,
+                 is_fit_to_gt_loc_scale=False,
                  preprocessor=None):
         self.model = model.to(device)
         self.points_batch_size = points_batch_size
@@ -49,6 +57,7 @@ class Generator3D(object):
         self.sample = sample
         self.simplify_nfaces = simplify_nfaces
         self.preprocessor = preprocessor
+        self.is_fit_to_gt_loc_scale = is_fit_to_gt_loc_scale
 
     def generate_mesh(self, data, return_stats=True):
         ''' Generates the output mesh.
@@ -77,8 +86,21 @@ class Generator3D(object):
             c = self.model.encode_inputs(inputs)
         stats_dict['time (encode inputs)'] = time.time() - t0
 
-        z = self.model.get_z_from_prior((1,), sample=self.sample).to(device)
+        z = self.model.get_z_from_prior((1, ), sample=self.sample).to(device)
         mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
+
+        if self.is_fit_to_gt_loc_scale:
+            pointcloud = data.get('pointcloud').to(self.device).float()
+            verts = torch.from_numpy(mesh.vertices).to(
+                self.device).float().unsqueeze(0)
+            try:
+                verts = bsp_utils.realign(verts,
+                                          verts,
+                                          pointcloud,
+                                          adjust_bbox=True)
+            except:
+                print('Realignment failed')
+            mesh.vertices = verts[0].detach().cpu().numpy()
 
         if return_stats:
             return mesh, stats_dict
@@ -102,14 +124,13 @@ class Generator3D(object):
         # Shortcut
         if self.upsampling_steps == 0:
             nx = self.resolution0
-            pointsf = box_size * make_3d_grid(
-                (-0.5,)*3, (0.5,)*3, (nx,)*3
-            )
+            pointsf = box_size * make_3d_grid((-0.5, ) * 3, (0.5, ) * 3,
+                                              (nx, ) * 3)
             values = self.eval_points(pointsf, z, c, **kwargs).cpu().numpy()
             value_grid = values.reshape(nx, nx, nx)
         else:
-            mesh_extractor = MISE(
-                self.resolution0, self.upsampling_steps, threshold)
+            mesh_extractor = MISE(self.resolution0, self.upsampling_steps,
+                                  threshold)
 
             points = mesh_extractor.query()
 
@@ -120,8 +141,8 @@ class Generator3D(object):
                 pointsf = pointsf / mesh_extractor.resolution
                 pointsf = box_size * (pointsf - 0.5)
                 # Evaluate model and update
-                values = self.eval_points(
-                    pointsf, z, c, **kwargs).cpu().numpy()
+                values = self.eval_points(pointsf, z, c,
+                                          **kwargs).cpu().numpy()
                 values = values.astype(np.float64)
                 mesh_extractor.update(points, values)
                 points = mesh_extractor.query()
@@ -171,17 +192,16 @@ class Generator3D(object):
         threshold = np.log(self.threshold) - np.log(1. - self.threshold)
         # Make sure that mesh is watertight
         t0 = time.time()
-        occ_hat_padded = np.pad(
-            occ_hat, 1, 'constant', constant_values=-1e6)
-        vertices, triangles = libmcubes.marching_cubes(
-            occ_hat_padded, threshold)
+        occ_hat_padded = np.pad(occ_hat, 1, 'constant', constant_values=-1e6)
+        vertices, triangles = libmcubes.marching_cubes(occ_hat_padded,
+                                                       threshold)
         stats_dict['time (marching cubes)'] = time.time() - t0
         # Strange behaviour in libmcubes: vertices are shifted by 0.5
         vertices -= 0.5
         # Undo padding
         vertices -= 1
         # Normalize to bounding box
-        vertices /= np.array([n_x-1, n_y-1, n_z-1])
+        vertices /= np.array([n_x - 1, n_y - 1, n_z - 1])
         vertices = box_size * (vertices - 0.5)
 
         # mesh_pymesh = pymesh.form_mesh(vertices, triangles)
@@ -197,7 +217,8 @@ class Generator3D(object):
             normals = None
 
         # Create mesh
-        mesh = trimesh.Trimesh(vertices, triangles,
+        mesh = trimesh.Trimesh(vertices,
+                               triangles,
                                vertex_normals=normals,
                                process=False)
 
@@ -261,7 +282,7 @@ class Generator3D(object):
 
         # Some shorthands
         n_x, n_y, n_z = occ_hat.shape
-        assert(n_x == n_y == n_z)
+        assert (n_x == n_y == n_z)
         # threshold = np.log(self.threshold) - np.log(1. - self.threshold)
         threshold = self.threshold
 
@@ -290,10 +311,9 @@ class Generator3D(object):
             face_normal = face_normal / \
                 (face_normal.norm(dim=1, keepdim=True) + 1e-10)
             face_value = torch.sigmoid(
-                self.model.decode(face_point.unsqueeze(0), z, c).logits
-            )
-            normal_target = -autograd.grad(
-                [face_value.sum()], [face_point], create_graph=True)[0]
+                self.model.decode(face_point.unsqueeze(0), z, c).logits)
+            normal_target = -autograd.grad([face_value.sum()], [face_point],
+                                           create_graph=True)[0]
 
             normal_target = \
                 normal_target / \

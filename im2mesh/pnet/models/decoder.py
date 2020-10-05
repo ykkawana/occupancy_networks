@@ -59,7 +59,9 @@ class PeriodicShapeDecoderSimplest(nn.Module):
         concat_input_feature_with_pose_feature=False,
         return_sdf=False,
         is_radius_reg=False,
+        is_get_radius_direction_as_normals=False,
         spherical_angles=False,
+        is_simpler_sgn=False,
         extract_surface_point_by_max=False,
         last_scale=.1):
         super().__init__()
@@ -68,6 +70,7 @@ class PeriodicShapeDecoderSimplest(nn.Module):
         self.get_features_from = get_features_from
         self.concat_input_feature_with_pose_feature = concat_input_feature_with_pose_feature
         self.is_radius_reg = is_radius_reg
+        self.is_get_radius_direction_as_normals = is_get_radius_direction_as_normals
 
         self.primitive = super_shape.SuperShapes(
             max_m,
@@ -114,6 +117,7 @@ class PeriodicShapeDecoderSimplest(nn.Module):
             is_feature_radius=is_feature_radius,
             no_last_bias=no_last_bias,
             spherical_angles=spherical_angles,
+            is_simpler_sgn=is_simpler_sgn,
             extract_surface_point_by_max=extract_surface_point_by_max,
             return_sdf=return_sdf)
         # simple_sampler = super_shape_sampler.SuperShapeSampler(max_m,
@@ -123,7 +127,13 @@ class PeriodicShapeDecoderSimplest(nn.Module):
                                                            n_primitives,
                                                            dim=dim)
 
-    def forward(self, coord, _, color_feature, angles=None, **kwargs):
+    def forward(self,
+                coord,
+                _,
+                color_feature,
+                angles=None,
+                only_return_points=False,
+                **kwargs):
         params = self.primitive(color_feature)
 
         if self.is_train_periodic_shape_sampler:
@@ -137,12 +147,18 @@ class PeriodicShapeDecoderSimplest(nn.Module):
                     raise NotImplementedError
             else:
                 feature = color_feature
-
-            output = self.p_sampler(params,
-                                    thetas=angles,
-                                    coord=coord,
-                                    points=feature,
-                                    return_surface_mask=True)
+            if only_return_points:
+                output = self.p_sampler(params,
+                                        thetas=angles,
+                                        coord=None,
+                                        points=feature,
+                                        return_surface_mask=False)
+            else:
+                output = self.p_sampler(params,
+                                        thetas=angles,
+                                        coord=coord,
+                                        points=feature,
+                                        return_surface_mask=True)
             pcoord, o1, o2, o3 = output
         else:
             output = self.simple_sampler(params,
@@ -151,7 +167,7 @@ class PeriodicShapeDecoderSimplest(nn.Module):
                                          points=color_feature,
                                          return_surface_mask=True)
             pcoord, o1, o2, o3 = output
-        if self.is_radius_reg:
+        if self.is_radius_reg or self.is_get_radius_direction_as_normals:
             # B, N, P, dim
             # pcoord
 
@@ -160,7 +176,6 @@ class PeriodicShapeDecoderSimplest(nn.Module):
             pcentered_coord = pcoord - transition
             radius = (pcentered_coord**2).sum(-1).clamp(min=EPS).sqrt()
             output = (pcoord, o1, o2, o3, radius)
-
         else:
             output = (pcoord, o1, o2, o3, None)
 

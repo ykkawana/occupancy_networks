@@ -1,7 +1,8 @@
 # import torch.distributions as dist
 import os
+import pickle
 os.environ['CUDA_PATH'] = '/usr/local/cuda-10.0'
-
+import trimesh
 import torch
 import shutil
 import argparse
@@ -21,6 +22,8 @@ import yaml
 from datetime import datetime
 import subprocess
 import eval_utils
+from disposable import bsp_load_data
+import random
 
 
 def represent_odict(dumper, instance):
@@ -87,6 +90,14 @@ else:
     out_dir = os.path.dirname(args.resume_generation_dir)
     generation_dir = args.resume_generation_dir
 
+if not args.explicit:
+    threshold_txt_path = os.path.join(out_dir, 'threshold')
+    if os.path.exists(threshold_txt_path):
+        with open(threshold_txt_path) as f:
+            threshold = float(f.readlines()[0].strip())
+            print('Use threshold in dir', threshold)
+            cfg['test']['threshold'] = threshold
+
 if not os.path.exists(generation_dir) and args.resume_generation_dir is None:
     os.makedirs(generation_dir)
 
@@ -152,6 +163,42 @@ model.eval()
 
 # Count how many models already created
 model_counter = defaultdict(int)
+
+if 'modelid' in cfg['data']:
+    points, values, pointcloud = bsp_load_data.get_bsp_data(
+        cfg['data']['classes'][0] + '/' + cfg['data']['modelid'][0])
+    input_idx = random.sample(range(len(pointcloud)),
+                              k=min(cfg['data']['pointcloud_n'],
+                                    len(pointcloud)))
+    pointcloud_idx = random.sample(range(len(pointcloud)),
+                                   k=min(cfg['data']['pointcloud_target_n'],
+                                         len(pointcloud)))
+    points_idx = random.sample(range(len(points)),
+                               k=min(cfg['data']['points_subsample'],
+                                     len(pointcloud)))
+    batch_update = {
+        'points':
+        torch.from_numpy(points[points_idx, :]).unsqueeze(0),
+        'points.occ':
+        torch.from_numpy(values[points_idx, :]).unsqueeze(0).squeeze(-1),
+        'pointcloud':
+        torch.from_numpy(pointcloud[pointcloud_idx, :]).unsqueeze(0),
+        'inputs':
+        torch.from_numpy(pointcloud[input_idx, :]).unsqueeze(0)
+    }
+    val_batch_update = {
+        'points_iou':
+        torch.from_numpy(points[points_idx, :]).unsqueeze(0),
+        'points_iou.occ':
+        torch.from_numpy(values[points_idx, :]).unsqueeze(0).squeeze(-1),
+        'pointcloud':
+        torch.from_numpy(pointcloud[pointcloud_idx, :]).unsqueeze(0),
+        'inputs':
+        torch.from_numpy(pointcloud[input_idx, :]).unsqueeze(0)
+    }
+    batch = next(iter(test_loader))
+    batch.update(batch_update)
+    test_loader = [batch]
 
 for it, data in enumerate(tqdm(test_loader)):
     # Output folders
@@ -247,7 +294,8 @@ for it, data in enumerate(tqdm(test_loader)):
                 mesh_dir, '%s_vertex_visbility.npz' % modelname)
         elif cfg['method'] == 'bspnet':
             visibility_out_file = os.path.join(
-                mesh_dir, '%s_vertex_attributes.npz' % modelname)
+                mesh_dir, '%s_%s.npz' % (modelname, cfg['test'].get(
+                    'vertex_attribute_filename', 'vertex_attribute')))
         if os.path.exists(visibility_out_file):
             is_vertex_attribute_file_exists = True
 
@@ -276,7 +324,14 @@ for it, data in enumerate(tqdm(test_loader)):
         time_dict.update(stats_dict)
 
         # Write output
-        mesh.export(mesh_out_file)
+        if isinstance(mesh, list):
+            #mesh.export(os.path.splitext(mesh_out_file)[0] + '.obj')
+            mesh_out_file = os.path.splitext(mesh_out_file)[0] + '.pkl'
+            pickle.dump(mesh, open(mesh_out_file, 'wb'))
+            #mesh.export(os.path.splitext(mesh_out_file)[0] + '.obj')
+            #print(os.path.splitext(mesh_out_file)[0] + '.obj')
+        else:
+            mesh.export(mesh_out_file)
         out_file_dict['mesh'] = mesh_out_file
         if cfg['generation'].get('is_explicit_mesh',
                                  False) and cfg['method'] == 'pnet':
@@ -285,7 +340,8 @@ for it, data in enumerate(tqdm(test_loader)):
             np.savez(visibility_out_file, vertex_visibility=visibility)
             out_file_dict['vertex_visibility'] = visibility_out_file
 
-        elif cfg['method'] == 'bspnet':
+        elif cfg['method'] == 'bspnet' and not cfg['generation'].get(
+                'is_gen_skip_vertex_attributes', False):
             np.savez(visibility_out_file,
                      vertex_visibility=visibility,
                      vertices=vertices,

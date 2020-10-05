@@ -52,6 +52,13 @@ class SubsamplePointcloud(object):
         data_out[None] = points[indices, :]
         data_out['normals'] = normals[indices, :]
 
+        if 'atlasnetv2_points' in data:
+            #N = min(self.N, data_out['atlasnetv2_points'].shape[0])
+            indices = np.random.randint(data_out['atlasnetv2_points'].shape[0],
+                                        size=self.N)
+            data_out['atlasnetv2_points'] = data_out['atlasnetv2_points'][
+                indices, :]
+
         return data_out
 
 

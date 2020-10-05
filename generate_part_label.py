@@ -7,11 +7,12 @@ import pandas
 import pickle
 import subprocess
 import torch
+import argparse
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 import sys
 import tempfile
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 sys.path.insert(0, '/home/mil/kawana/workspace/occupancy_networks')
 sys.path.insert(
     0,
@@ -34,10 +35,37 @@ import yaml
 import dotenv
 from bspnet import modelSVR
 from bspnet import utils as bsp_utils
+import eval_utils
 
 dotenv.load_dotenv('/home/mil/kawana/workspace/occupancy_networks/.env',
                    verbose=True)
 
+
+def represent_odict(dumper, instance):
+    return dumper.represent_mapping('tag:yaml.org,2002:map', instance.items())
+
+
+def construct_odict(loader, node):
+    return OrderedDict(loader.construct_pairs(node))
+
+
+yaml.add_representer(OrderedDict, represent_odict)
+yaml.add_constructor('tag:yaml.org,2002:map', construct_odict)
+
+parser = argparse.ArgumentParser(
+    description='Extract meshes from occupancy process.')
+parser.add_argument('config', type=str, help='Path to config file.')
+parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
+parser.add_argument(
+    '--explicit',
+    action='store_true',
+    help=
+    'to generate mesh with explicit rep, run: python3 generate.py --explicit --data.is_normal_icosahedron true --data.icosahedron_subdiv 4'
+)
+parser.add_argument('--unique_name',
+                    default='',
+                    type=str,
+                    help='String name for generation.')
 date_str = datetime.now().strftime(('%Y%m%d_%H%M%S'))
 
 
@@ -62,10 +90,9 @@ class_names = ['airplane', 'chair', 'lamp', 'table']
 config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn10_target_n_4096_no_overlap_reg_20200502_001739/eval_config_20200502_105908.yaml'
 config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn256_author_provided_20200501_184850/config.yaml'
 config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_no_normal_20200502_202018/eval_config_20200502_172135.yaml'
-config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_20200502_104902/eval_config_20200502_173040.yaml'
-config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_target_n_4096_no_overlap_reg_20200502_041512/eval_config_20200502_200733.yaml'
 config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/bspnet_pn30_20200501_191145/gen_part_label_20200504_210430.yaml'
 config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/atlasnetv2_pn30_20200503_221032/eval_config_20200503_221032.yaml'
+config_path = '/home/mil/kawana/workspace/occupancy_networks/out/submission/eval/img/pnet_finetue_only_transition_cceff10_pn30_no_regs_20200502_104902/eval_config_20200502_173040.yaml'
 if len(sys.argv) > 1:
     config_path = sys.argv[1]
 base_eval_dir = os.path.dirname(config_path)
@@ -122,6 +149,9 @@ class_names_to_part_ids = {
 
 # %%
 cfg = config.load_config(config_path, 'configs/default.yaml')
+
+args, unknown_args = parser.parse_known_args()
+eval_utils.update_dict_with_options(cfg, unknown_args)
 cfg['data']['classes'] = [label_to_synset[label] for label in class_names]
 
 #cfg['model']['decoder_kwargs']['extract_surface_point_by_max'] = True
@@ -131,6 +161,9 @@ cfg['data']['semseg_pointcloud_file'] = 'bae_semseg_labeled_pointcloud.npz'
 cfg['data']['val_split'] = 'trainval'
 cfg['data']['train_split'] = 'trainval'
 cfg['data']['test_split'] = 'test'
+
+cfg['data']['is_normal_icosahedron'] = False
+cfg['data']['is_normal_uv_sphere'] = True
 
 if debug:
     #cfg['data']['debug'] = {'sample_n': 50}

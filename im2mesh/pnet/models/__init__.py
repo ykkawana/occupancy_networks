@@ -98,7 +98,7 @@ class PeriodicShapeNetwork(nn.Module):
 
         return c
 
-    def decode(self, p, z, c, angles=None, **kwargs):
+    def decode(self, p, z, c, angles=None, only_return_points=False, **kwargs):
         ''' Returns occupancy probabilities for the sampled points.
 
         Args:
@@ -108,7 +108,7 @@ class PeriodicShapeNetwork(nn.Module):
         '''
 
         assert angles is not None
-        return self.decoder(p, z, c, angles=angles, **kwargs)
+        return self.decoder(p, z, c, angles=angles, only_return_points=only_return_points, **kwargs)
 
     def infer_z(self, p, occ, c, **kwargs):
         ''' Infers z.
